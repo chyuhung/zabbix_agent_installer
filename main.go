@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/user"
+	"path"
 	"time"
 )
 
@@ -157,6 +159,21 @@ func getParams() (serverIP string, port string, username string, directory strin
 		directory = getHomeDir()
 	}
 	return serverIP, port, username, directory
+}
+
+func downloadPackage(url string, savePath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	filename := path.Base(url)
+	out, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	return nil
 }
 
 // 获取操作系统类型
