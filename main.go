@@ -19,7 +19,18 @@ import (
 // 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 // 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
 var (
-	Cloud = "cloud"
+	Cloud       = "cloud"
+	PackageName = "zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
+)
+var (
+	PidFile          string
+	LogFile          string
+	StartAgents      string
+	ServerActive     string
+	Hostname         string
+	HostMetadataItem string
+	BufferSize       string
+	Include          string
 )
 
 type agentConfig struct {
@@ -46,10 +57,11 @@ func (a *agentConfig) SetAgentDir(dir string) {
 }
 
 // 配置安装用户信息
-func (a *agentConfig) setParams(serverIP string, port string, user string, directory string) {
+func (a *agentConfig) setParams(serverIP string, serverPort string, agentUser string, agentDir string) {
 	a.SetServerIP(serverIP)
-	a.SetServerPort(port)
-	a.SetAgentDir(directory)
+	a.SetServerPort(serverPort)
+	a.SetAgentUser(agentUser)
+	a.SetAgentDir(agentDir)
 }
 func (a *agentConfig) GetServerIP() string {
 	return a.serverIP
@@ -78,7 +90,7 @@ func logger(level string, log string) {
 }
 
 // 获取 ip
-func getClientIP() string {
+func getAgentIP() string {
 	var ip string
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -101,7 +113,7 @@ func getClientIP() string {
 }
 
 // 获取当前用户用户名
-func getUser() string {
+func getCurrUser() string {
 	currentUser, err := user.Current()
 	if err != nil {
 		logger("", err.Error())
@@ -110,7 +122,7 @@ func getUser() string {
 }
 
 // 获取当前用户家目录
-func getUserDir() string {
+func getCurrUserHomeDir() string {
 	var dir string
 	currentUser, err := user.Current()
 	if err != nil {
@@ -136,7 +148,7 @@ func isIPv4(ipv4 string) bool {
 }
 
 // 测试ip是否可达
-func isIPReachable(ipv4 string, port string) bool {
+func isReachable(ipv4 string, port string) bool {
 	addr := net.JoinHostPort(ipv4, port)
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
@@ -148,12 +160,12 @@ func isIPReachable(ipv4 string, port string) bool {
 }
 
 // 组装配置必要参数
-func getParams() (serverIP string, port string, username string, directory string) {
+func scanParams() (serverIP string, serverPort string, agentUser string, agentDir string) {
 	// 接受命令
 	flag.StringVar(&serverIP, "s", "", "zabbix server ip,you must input server ip.")
-	flag.StringVar(&port, "p", "8001", "zabbix server port.")
-	flag.StringVar(&username, "u", "cloud", "zabbix agent username.")
-	flag.StringVar(&directory, "d", "", "zabbix agent directory,default is current user's home directory.")
+	flag.StringVar(&serverPort, "p", "8001", "zabbix server port.")
+	flag.StringVar(&agentUser, "u", "cloud", "zabbix agent username.")
+	flag.StringVar(&agentDir, "d", "", "zabbix agent directory,default is current user's home directory.")
 	// 转换
 	flag.Parse()
 
@@ -168,29 +180,29 @@ func getParams() (serverIP string, port string, username string, directory strin
 		os.Exit(1)
 	}
 	// port
-	if isIPReachable(serverIP, port) {
-		logger("INFO", fmt.Sprintf("%s:%s is reachable", serverIP, port))
+	if isReachable(serverIP, serverPort) {
+		logger("INFO", fmt.Sprintf("%s:%s is reachable", serverIP, serverPort))
 	} else {
-		logger("INFO", fmt.Sprintf("%s:%s is unreachable", serverIP, port))
+		logger("INFO", fmt.Sprintf("%s:%s is unreachable", serverIP, serverPort))
 
 	}
 
-	// username
+	// agentuser
 	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
-	if username != getUser() && username == Cloud {
+	if agentUser != getCurrUser() && agentUser == Cloud {
 		logger("ERROR", "请切换到默认用户再安装")
 		os.Exit(1)
 	}
-	if username != getUser() && username != Cloud {
+	if agentUser != getCurrUser() && agentUser != Cloud {
 		logger("ERROR", "请切换到指定用户再安装")
 		os.Exit(1)
 	}
 	// directory
-	if directory == "" {
-		directory = getUserDir()
+	if agentDir == "" {
+		agentDir = getCurrUserHomeDir()
 	}
-	return serverIP, port, username, directory
+	return serverIP, serverPort, agentUser, agentDir
 }
 
 // 下载安装包
@@ -248,7 +260,7 @@ func setINI(cfg *ini.File) {
 	// Include=%change_basepath%/etc/zabbix_agentd.conf.d/
 	// UnsafeUserParameters=1
 
-	cfg.Section("").Key("ServerActive").SetValue(NewAgent().serverIP)
+	cfg.Section("").Key("ServerActive").SetValue("")
 }
 
 func loadINI(filename string) error {
@@ -270,26 +282,18 @@ func loadINI(filename string) error {
 
 }
 
-// 获取操作系统类型
-func getOSType() string {
-	return ""
-}
-
-// 设置安装目录
-func setDir() {}
 func main() {
 	// 创建实例存储关键参数
 	agent := NewAgent()
 	// 获取关键参数
-	serverIP, port, username, directory := getParams()
+	serverIP, port, username, directory := scanParams()
 	// 设置实例关键参数
 	agent.setParams(serverIP, port, username, directory)
 	// 输出配置信息
 	fmt.Println(agent.serverIP)
 	fmt.Println(agent.agentUser)
 	fmt.Println(agent.agentDir)
-	filename := "zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
-	err := unzipPackage(filename, ".")
+	err := unzipPackage(PackageName, ".")
 	if err != nil {
 		logger("", err.Error())
 	}
