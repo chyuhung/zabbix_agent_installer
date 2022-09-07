@@ -23,7 +23,7 @@ var (
 	Cloud       = "cloud"
 	LinuxURL    = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_linux/"
 	WinURL      = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_windows/"
-	PackageName = "zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
+	PackagePath = "/zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
 )
 var (
 	ServerIP   string
@@ -65,11 +65,12 @@ func getCurrUser() string {
 }
 
 // 获取当前用户家目录
-func getCurrUserHomeDir() string {
+func getUserPath() string {
 	var dir string
 	currentUser, err := user.Current()
 	if err != nil {
 		logger("", err.Error())
+		os.Exit(1)
 	}
 	if d := currentUser.HomeDir; d != "" {
 		dir = d
@@ -141,7 +142,7 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	}
 	// agentDir
 	if agentDir == "" {
-		agentDir = getCurrUserHomeDir()
+		agentDir = getUserPath()
 	}
 	// agentIP
 	agentIP = getAgentIP()
@@ -170,24 +171,18 @@ func downloadPackage(url string, savePath string) error {
 }
 
 // 解压安装包
-func unzipPackage(filename string, directory string) error {
-	// 获取运行路径,构造文件绝对路径
-	cd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	filePath := cd + "/" + filename
+func unzipPackage(fileAbsPath string, dirAbsPath string) error {
 	// 检查文件是否存在
-	_, err = os.Stat(filePath)
+	_, err := os.Stat(fileAbsPath)
 	if os.IsNotExist(err) {
-		err := downloadPackage(LinuxURL, filePath)
+		err := downloadPackage(LinuxURL, fileAbsPath)
 		if err != nil {
 			logger("", err.Error())
 			os.Exit(1)
 		}
 	}
 	// 使用linux命令处理
-	cmd := exec.Command("tar", "--directory", directory, "-xzf", filename)
+	cmd := exec.Command("tar", "--directory", dirAbsPath, "-xzf", fileAbsPath)
 	_, err = cmd.Output()
 	if err != nil {
 		return err
@@ -195,33 +190,41 @@ func unzipPackage(filename string, directory string) error {
 	return nil
 }
 
-func setINI(filePath string) error {
-	cd, err := os.Getwd()
+func getAbsPath(fileRelPath string) string {
+	return getUserPath() + fileRelPath
+}
+
+func writeINI(k string, v string, fileAbsPath string) {
+	cfg, err := ini.Load(fileAbsPath)
 	if err != nil {
-		return err
+		logger("", err.Error())
+		return
 	}
-	fileFullPath := cd + filePath
-	_, err = os.Stat(fileFullPath)
-	if os.IsNotExist(err) {
-		return err
-	}
-	cfg, err := ini.Load(fileFullPath)
+	cfg.Section("").Key(k).SetValue(v)
+	err = cfg.SaveTo(fileAbsPath)
 	if err != nil {
-		return err
+		logger("", err.Error())
+		return
 	}
-	cfg.Section("").Key("ServerActive").SetValue(ServerIP)
-	cfg.Section("").Key("Hostname").SetValue(AgentIP)
-	cfg.Section("").Key("Include").SetValue(AgentDir + "/etc/zabbix_agentd.conf.d/")
-	cfg.Section("").Key("PidFile").SetValue(AgentDir + "/zabbix_agentd.pid")
-	cfg.Section("").Key("LogFile").SetValue(AgentDir + "/zabbix_agentd.log")
-	err = cfg.SaveTo(fileFullPath)
+}
+
+func isFileExist(fileAbsPath string) bool {
+	_, err := os.Stat(fileAbsPath)
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			return false
+		}
 	}
-	return nil
+	return true
 }
 
 func main() {
+	// 配置路径
+	zabbixDir := "/zabbix_agentd"
+	zabbixConfDirAbsPath := getAbsPath(zabbixDir + "/etc/zabbix_agentd.conf.d")
+	zabbixConfAbsPath := getAbsPath(zabbixDir + "/etc/zabbix_agentd.conf")
+	zabbixPidFileAbsPath := getAbsPath(zabbixDir + "/zabbix_agentd.pid")
+	zabbixLogFileAbsPath := getAbsPath(zabbixDir + "/zabbix_agentd.log")
 	// 获取关键参数
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := scanParams()
 	// 输出配置信息
@@ -231,10 +234,15 @@ func main() {
 	logger("INFO", fmt.Sprintf("AgentDir:%s", AgentDir))
 	logger("INFO", fmt.Sprintf("AgentIP:%s", AgentIP))
 	// 解压安装包
-	err := unzipPackage(PackageName, ".")
+	err := unzipPackage(getUserPath()+PackagePath, getUserPath())
 	if err != nil {
 		logger("", err.Error())
 	}
-	setINI("/zabbix_agentd/etc/abbix_agentd.conf")
-	fmt.Println("done")
+
+	// 写入配置
+	writeINI("Include", zabbixConfDirAbsPath, zabbixConfAbsPath)
+	writeINI("PidFile", zabbixPidFileAbsPath, zabbixConfAbsPath)
+	writeINI("LogFile", zabbixLogFileAbsPath, zabbixConfAbsPath)
+
+	logger("INFO", "Done.")
 }
