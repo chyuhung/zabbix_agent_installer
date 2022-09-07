@@ -96,14 +96,10 @@ func isReachable(ipv4 string, port string) bool {
 
 // 是否有值
 func isValue(v interface{}) bool {
-	if v.(string) != "" {
-		return true
-	}
-	if v.(bool) {
-		return true
-	}
-	if v.(int) != 0 {
-		return true
+	if f, ok := v.(string); ok {
+		if f != "" {
+			return true
+		}
 	}
 	return false
 }
@@ -120,7 +116,7 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	flag.Parse()
 	// 补充空值参数
 	// serverIP,必要参数
-	if isValue(serverIP) {
+	if !isValue(serverIP) {
 		logger("ERROR", "缺少必要参数serverip")
 		os.Exit(1)
 	}
