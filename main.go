@@ -23,7 +23,6 @@ var (
 	DefaultUser = "cloud"
 	LinuxURL    = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_linux/"
 	WinURL      = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_windows/"
-	PackagePath = "/zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
 )
 var (
 	ServerIP   string
@@ -45,7 +44,7 @@ func logger(level string, log string) {
 func getAgentIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:53")
 	if err != nil {
-		logger("", err.Error())
+		logger("ERROR", "get agent ip failed "+err.Error())
 		os.Exit(1)
 	}
 	defer conn.Close()
@@ -57,7 +56,7 @@ func getAgentIP() string {
 func getCurrUser() string {
 	currentUser, err := user.Current()
 	if err != nil {
-		logger("", err.Error())
+		logger("ERROR", "get current user failed "+err.Error())
 	}
 	return currentUser.Name
 }
@@ -66,7 +65,7 @@ func getCurrUser() string {
 func getUserPath() string {
 	currentUser, err := user.Current()
 	if err != nil {
-		logger("", err.Error())
+		logger("ERROR", "get current user home dir failed "+err.Error())
 		os.Exit(1)
 	}
 	return currentUser.HomeDir
@@ -87,7 +86,7 @@ func isReachable(ipv4 string, port string) bool {
 	addr := net.JoinHostPort(ipv4, port)
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
-		logger("", err.Error())
+		logger("WARN", fmt.Sprintf("connect to %s failed %s", ipv4, err.Error()))
 		return false
 	}
 	defer conn.Close()
@@ -114,14 +113,14 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	flag.StringVar(&agentIP, "i", "", "zabbix agent ip,default is the main ipv4.")
 	// 转换
 	flag.Parse()
-	// 补充空值参数
+
 	// serverIP,必要参数
 	if !isValue(serverIP) {
-		logger("ERROR", "缺少必要参数serverip")
+		logger("ERROR", "must input zabbix server ip")
 		os.Exit(1)
 	}
 	if !isIPv4(serverIP) {
-		logger("ERROR", "非法ip")
+		logger("ERROR", "invalid ip")
 		os.Exit(1)
 	}
 	// serverPort
@@ -132,19 +131,21 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
 	if agentUser != getCurrUser() && agentUser == DefaultUser {
-		logger("ERROR", "请切换到默认用户再安装")
+		logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 		os.Exit(1)
 	}
 	if agentUser != getCurrUser() && agentUser != DefaultUser {
-		logger("ERROR", "请切换到指定用户再安装")
+		logger("ERROR", "switch to the user you specified then install")
 		os.Exit(1)
 	}
 	// agentDir
-	if isValue(agentDir) {
+	if !isValue(agentDir) {
 		agentDir = getUserPath()
 	}
 	// agentIP
-	agentIP = getAgentIP()
+	if !isValue(agentIP) {
+		agentIP = getAgentIP()
+	}
 	return serverIP, serverPort, agentUser, agentDir, agentIP
 }
 
@@ -157,6 +158,7 @@ func fetchPackage(url string, saveAbsPath string) error {
 	defer resp.Body.Close()
 	// 创建文件，从url中读取文件名
 	filename := path.Base(url)
+	logger("INFO", fmt.Sprintf("starting to download %s from %s\n", filename, url))
 	out, err := os.OpenFile(saveAbsPath+filename, os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		return err
@@ -166,43 +168,41 @@ func fetchPackage(url string, saveAbsPath string) error {
 	if err != nil {
 		return err
 	}
+	logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
+	logger("INFO", "Download successful")
 	return nil
 }
 
 // 解压安装包
-func unzipPackage(fileAbsPath string, dirAbsPath string) error {
+func unzipPackage(fileAbsPath string, dirAbsPath string) {
 	// 检查文件是否存在
 	if !isFileExist(fileAbsPath) {
+		logger("INFO", "package is not found,starting to download")
 		err := fetchPackage(LinuxURL, fileAbsPath)
 		if err != nil {
-			logger("", err.Error())
-			logger("ERROR", "没有可用安装包")
+			logger("ERROR", "download package failed"+err.Error())
 			os.Exit(1)
 		}
 	}
 	// 使用linux命令解压
+	logger("INFO", "starting to unzip package")
 	cmd := exec.Command("tar", "--directory", dirAbsPath, "-xzf", fileAbsPath)
 	_, err := cmd.Output()
 	if err != nil {
-		return err
+		logger("ERROR", "unzip archive failed "+err.Error())
 	}
-	return nil
+	logger("INFO", "unzip package successful")
 }
-
-func getAbsPath(fileRelPath string) string {
-	return getUserPath() + fileRelPath
-}
-
 func writeINI(k string, v string, fileAbsPath string) {
 	cfg, err := ini.Load(fileAbsPath)
 	if err != nil {
-		logger("", err.Error())
+		logger("ERROR", "write config file failed "+err.Error())
 		return
 	}
 	cfg.Section("").Key(k).SetValue(v)
 	err = cfg.SaveTo(fileAbsPath)
 	if err != nil {
-		logger("", err.Error())
+		logger("ERROR", "save config file failed "+err.Error())
 		return
 	}
 }
@@ -217,24 +217,38 @@ func isFileExist(fileAbsPath string) bool {
 	return true
 }
 
+// 检查进程
+func checkAgentProcess() {
+	c1 := exec.Command("sh", "-c", "ps -ef|grep -v grep |grep zabbix|grep -v installer")
+	out, err := c1.Output()
+	if err != nil {
+		logger("ERROR", "run ps failed "+err.Error())
+	}
+	logger("INFO", "run ps successful \n"+string(out))
+}
+
+// 启动zabbix agent
 func startAgent(scriptAbsPath string) {
-	cmd := exec.Command("sh", scriptAbsPath)
+	cmd := exec.Command("sh", scriptAbsPath, "restart")
 	out, err := cmd.Output()
 	if err != nil {
-		logger("", err.Error())
-		return
+		logger("ERROR", "start agent failed "+err.Error())
 	}
-	logger("INFO:", string(out))
+	logger("INFO", "start agent successful \n"+string(out))
+}
+
+// 修改启动脚本
+func strBuild(zabbixDirAbsPath string, fileAbsPath string) {
+	args := "s#%change_basepath%#" + zabbixDirAbsPath + "#g"
+	cmd := exec.Command("sed", "-i", args, fileAbsPath)
+	out, err := cmd.Output()
+	if err != nil {
+		logger("ERROR", "modify script failed "+err.Error())
+	}
+	logger("INFO", "modify script successful \n"+string(out))
 }
 
 func main() {
-	// 配置路径
-	zabbixDir := "/zabbix_agentd"
-	zabbixScript := "/zabbix_script.sh"
-	zabbixConfDirAbsPath := getAbsPath(zabbixDir + "/etc/zabbix_agentd.conf.d")
-	zabbixConfAbsPath := getAbsPath(zabbixDir + "/etc/zabbix_agentd.conf")
-	zabbixPidFileAbsPath := getAbsPath(zabbixDir + "/zabbix_agentd.pid")
-	zabbixLogFileAbsPath := getAbsPath(zabbixDir + "/zabbix_agentd.log")
 	// 获取关键参数
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := scanParams()
 	// 输出配置信息
@@ -243,11 +257,18 @@ func main() {
 	logger("INFO", fmt.Sprintf("AgentUser:%s", AgentUser))
 	logger("INFO", fmt.Sprintf("AgentDir:%s", AgentDir))
 	logger("INFO", fmt.Sprintf("AgentIP:%s", AgentIP))
+
+	// 配置路径
+	zabbixDir := "/zabbix_agentd"
+	zabbixScript := "/zabbix_script.sh"
+	packagePath := "/zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
+	zabbixConfDirAbsPath := AgentDir + zabbixDir + "/etc/zabbix_agentd.conf.d"
+	zabbixConfAbsPath := AgentDir + zabbixDir + "/etc/zabbix_agentd.conf"
+	zabbixPidFileAbsPath := AgentDir + zabbixDir + "/zabbix_agentd.pid"
+	zabbixLogFileAbsPath := AgentDir + zabbixDir + "/zabbix_agentd.log"
+
 	// 解压安装包
-	err := unzipPackage(getUserPath()+PackagePath, getUserPath())
-	if err != nil {
-		logger("", err.Error())
-	}
+	unzipPackage(AgentDir+packagePath, AgentDir)
 
 	// 写入配置
 	writeINI("Include", zabbixConfDirAbsPath, zabbixConfAbsPath)
@@ -256,7 +277,13 @@ func main() {
 	writeINI("ServerActive", ServerIP, zabbixConfAbsPath)
 	writeINI("Hostname", AgentIP, zabbixConfAbsPath)
 
+	// 修改启动脚本
+	strBuild(AgentDir+zabbixDir, AgentDir+zabbixDir+zabbixScript)
+
 	// 启动zabbix
-	startAgent(zabbixDir + zabbixScript)
-	logger("INFO", "Done.")
+	startAgent(AgentDir + zabbixDir + zabbixScript)
+
+	// 检查进程
+	checkAgentProcess()
+	logger("INFO", "zabbix agent installer is running done.")
 }
