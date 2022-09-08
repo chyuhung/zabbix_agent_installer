@@ -12,6 +12,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"zabbix_agent_installer/utils"
 
 	"github.com/go-ini/ini"
 )
@@ -150,10 +151,11 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 }
 
 // 下载安装包
-func fetchPackage(url string, saveAbsPath string) error {
+func fetchPackage(url string, saveAbsPath string) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		logger("ERROR", "download package failed "+err.Error())
+		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	// 创建文件，从url中读取文件名
@@ -161,16 +163,17 @@ func fetchPackage(url string, saveAbsPath string) error {
 	logger("INFO", fmt.Sprintf("starting to download %s from %s\n", filename, url))
 	out, err := os.OpenFile(saveAbsPath+filename, os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
-		return err
+		logger("ERROR", "download package failed "+err.Error())
+		os.Exit(1)
 	}
 	defer out.Close()
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return err
+		logger("ERROR", "download package failed "+err.Error())
+		os.Exit(1)
 	}
 	logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
 	logger("INFO", "Download successful")
-	return nil
 }
 
 // 解压安装包
@@ -178,11 +181,7 @@ func unzipPackage(fileAbsPath string, dirAbsPath string) {
 	// 检查文件是否存在
 	if !isFileExist(fileAbsPath) {
 		logger("INFO", "package is not found,starting to download")
-		err := fetchPackage(LinuxURL, fileAbsPath)
-		if err != nil {
-			logger("ERROR", "download package failed"+err.Error())
-			os.Exit(1)
-		}
+		fetchPackage(LinuxURL, fileAbsPath)
 	}
 	// 使用linux命令解压
 	logger("INFO", "starting to unzip package")
@@ -190,6 +189,7 @@ func unzipPackage(fileAbsPath string, dirAbsPath string) {
 	_, err := cmd.Output()
 	if err != nil {
 		logger("ERROR", "unzip archive failed "+err.Error())
+		os.Exit(1)
 	}
 	logger("INFO", "unzip package successful")
 }
@@ -223,6 +223,7 @@ func checkAgentProcess() {
 	out, err := c1.Output()
 	if err != nil {
 		logger("ERROR", "run ps failed "+err.Error())
+		return
 	}
 	logger("INFO", "run ps successful \n"+string(out))
 }
@@ -233,6 +234,7 @@ func startAgent(scriptAbsPath string) {
 	out, err := cmd.Output()
 	if err != nil {
 		logger("ERROR", "start agent failed "+err.Error())
+		os.Exit(1)
 	}
 	logger("INFO", "start agent successful \n"+string(out))
 }
@@ -244,6 +246,7 @@ func strBuild(zabbixDirAbsPath string, fileAbsPath string) {
 	out, err := cmd.Output()
 	if err != nil {
 		logger("ERROR", "modify script failed "+err.Error())
+		os.Exit(1)
 	}
 	logger("INFO", "modify script successful \n"+string(out))
 }
@@ -262,13 +265,26 @@ func main() {
 	zabbixDir := "/zabbix_agentd"
 	zabbixScript := "/zabbix_script.sh"
 	packagePath := "/zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz"
+	packageTarPath := AgentDir + "/zabbix_agentd.tar"
+	packageAbsPath := AgentDir + packagePath
+	zabbixDirAbsPath := AgentDir + zabbixDir
+	zabbixScriptAbsPath := AgentDir + zabbixDir + zabbixScript
 	zabbixConfDirAbsPath := AgentDir + zabbixDir + "/etc/zabbix_agentd.conf.d"
 	zabbixConfAbsPath := AgentDir + zabbixDir + "/etc/zabbix_agentd.conf"
 	zabbixPidFileAbsPath := AgentDir + zabbixDir + "/zabbix_agentd.pid"
 	zabbixLogFileAbsPath := AgentDir + zabbixDir + "/zabbix_agentd.log"
 
-	// 解压安装包
-	unzipPackage(AgentDir+packagePath, AgentDir)
+	if isFileExist(packageAbsPath) {
+		// 解压安装包
+		// unzipPackage(AgentDir+packagePath, AgentDir)
+		// err := utils.Unzip(AgentDir+packagePath, AgentDir)
+		err := utils.Ungzip(packageAbsPath, packageTarPath)
+		if err != nil {
+			logger("ERROR", "unzip package failed "+err.Error())
+		}
+	} else {
+		fetchPackage(LinuxURL, packageAbsPath)
+	}
 
 	// 写入配置
 	writeINI("Include", zabbixConfDirAbsPath, zabbixConfAbsPath)
@@ -278,10 +294,10 @@ func main() {
 	writeINI("Hostname", AgentIP, zabbixConfAbsPath)
 
 	// 修改启动脚本
-	strBuild(AgentDir+zabbixDir, AgentDir+zabbixDir+zabbixScript)
+	strBuild(zabbixDirAbsPath, zabbixConfAbsPath)
 
 	// 启动zabbix
-	startAgent(AgentDir + zabbixDir + zabbixScript)
+	startAgent(zabbixScriptAbsPath)
 
 	// 检查进程
 	checkAgentProcess()
