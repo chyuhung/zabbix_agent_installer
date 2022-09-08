@@ -60,6 +60,7 @@ func getCurrUser() string {
 	if err != nil {
 		logger("ERROR", "get current user failed "+err.Error())
 	}
+	logger("INFO", fmt.Sprintf("current user is %s\n", currentUser.Username))
 	return currentUser.Name
 }
 
@@ -125,10 +126,6 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 		logger("ERROR", "invalid ip")
 		os.Exit(1)
 	}
-	// serverPort
-	if !isReachable(serverIP, serverPort) {
-		logger("WARN", fmt.Sprintf("%s:%s is unreachable", serverIP, serverPort))
-	}
 	// agentUser
 	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
@@ -139,6 +136,10 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	if agentUser != getCurrUser() && agentUser != DefaultUser {
 		logger("ERROR", "switch to the user you specified then install")
 		os.Exit(1)
+	}
+	// serverPort
+	if !isReachable(serverIP, serverPort) {
+		logger("WARN", fmt.Sprintf("%s:%s is unreachable", serverIP, serverPort))
 	}
 	// agentDir
 	if !isValue(agentDir) {
