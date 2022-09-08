@@ -3,7 +3,6 @@ package utils
 import (
 	"archive/tar"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -61,15 +60,14 @@ func Untar(src string, dst string) error {
 			if err != nil {
 				return err
 			}
-			n, err := io.Copy(file, tr)
+			_, err = io.Copy(file, tr)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("untar %s, char %d\n", dstFile, n)
+			//fmt.Printf("untar %s, char %d\n", dstFile, n)
 			file.Close()
 		}
 	}
-	return nil
 }
 
 // 打包

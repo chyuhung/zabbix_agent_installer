@@ -60,8 +60,8 @@ func getCurrUser() string {
 	if err != nil {
 		logger("ERROR", "get current user failed "+err.Error())
 	}
-	logger("INFO", fmt.Sprintf("current user is %s\n", currentUser.Username))
-	return currentUser.Name
+	logger("INFO", fmt.Sprintf("current user is %s", currentUser.Username))
+	return currentUser.Username
 }
 
 // 获取当前用户家目录
@@ -106,6 +106,15 @@ func isValue(v interface{}) bool {
 	return false
 }
 
+/*
+func removeDelimiter(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\t", "")
+	return s
+}
+*/
+
 // 组装配置必要参数
 func scanParams() (serverIP string, serverPort string, agentUser string, agentDir string, agentIP string) {
 	// 接受命令
@@ -116,6 +125,14 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	flag.StringVar(&agentIP, "i", "", "zabbix agent ip,default is the main ipv4.")
 	// 转换
 	flag.Parse()
+	/*
+		// 去除特殊字符
+		serverIP = removeDelimiter(serverIP)
+		serverPort = removeDelimiter(serverPort)
+		agentUser = removeDelimiter(agentUser)
+		agentDir = removeDelimiter(agentDir)
+		agentIP = removeDelimiter(agentIP)
+	*/
 
 	// serverIP,必要参数
 	if !isValue(serverIP) {
@@ -126,16 +143,19 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 		logger("ERROR", "invalid ip")
 		os.Exit(1)
 	}
+
 	// agentUser
 	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
-	if agentUser != getCurrUser() && agentUser == DefaultUser {
-		logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
-		os.Exit(1)
-	}
-	if agentUser != getCurrUser() && agentUser != DefaultUser {
-		logger("ERROR", "switch to the user you specified then install")
-		os.Exit(1)
+	if agentUser != getCurrUser() {
+		fmt.Print([]byte(agentUser), []byte(getCurrUser()))
+		if agentUser == DefaultUser {
+			logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
+			os.Exit(1)
+		} else {
+			logger("ERROR", "switch to the user you specified then install")
+			os.Exit(1)
+		}
 	}
 	// serverPort
 	if !isReachable(serverIP, serverPort) {
@@ -162,7 +182,7 @@ func fetchPackage(url string, saveAbsPath string) {
 	defer resp.Body.Close()
 	// 创建文件，从url中读取文件名
 	filename := path.Base(url)
-	logger("INFO", fmt.Sprintf("starting to download %s from %s\n", filename, url))
+	logger("INFO", fmt.Sprintf("starting to download %s from %s", filename, url))
 	out, err := os.OpenFile(saveAbsPath+filename, os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		logger("ERROR", "download package failed "+err.Error())
@@ -230,30 +250,31 @@ func checkAgentProcess() {
 		logger("ERROR", "run ps failed "+err.Error())
 		return
 	}
-	logger("INFO", "run ps successful \n"+string(out))
+	logger("INFO", "run ps successful")
+	fmt.Print(string(out))
 }
 
 // 启动zabbix agent
 func startAgent(scriptAbsPath string) {
 	cmd := exec.Command("sh", scriptAbsPath, "restart")
-	out, err := cmd.Output()
+	_, err := cmd.Output()
 	if err != nil {
 		logger("ERROR", "start agent failed "+err.Error())
 		os.Exit(1)
 	}
-	logger("INFO", "start agent successful \n"+string(out))
+	logger("INFO", "start agent successful")
 }
 
 // 修改启动脚本
 func strBuild(zabbixDirAbsPath string, fileAbsPath string) {
 	args := "s#%change_basepath%#" + zabbixDirAbsPath + "#g"
 	cmd := exec.Command("sed", "-i", args, fileAbsPath)
-	out, err := cmd.Output()
+	_, err := cmd.Output()
 	if err != nil {
 		logger("ERROR", fmt.Sprintf("modify %s failed "+err.Error(), fileAbsPath))
 		os.Exit(1)
 	}
-	logger("INFO", fmt.Sprintf("modify %s successful \n"+string(out), fileAbsPath))
+	logger("INFO", fmt.Sprintf("modify %s successful", fileAbsPath))
 }
 
 func main() {
@@ -276,15 +297,14 @@ func main() {
 	zabbixLogFileAbsPath := filepath.Join(zabbixDirAbsPath, "/zabbix_agentd.log")
 
 	if isFileExist(packageAbsPath) {
-		// 解压安装包
-		// unzipPackage(AgentDir+packagePath, AgentDir)
-		// err := utils.Unzip(AgentDir+packagePath, AgentDir)
-		// 解压到当前文件夹
+		// 解压安装包,解压到当前文件夹
+		logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
 		err := utils.Untar(packageAbsPath, "")
 		if err != nil {
 			logger("", "ungzip failed "+err.Error())
 			return
 		}
+		logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
 	} else {
 		fetchPackage(LinuxURL, packageAbsPath)
 	}
