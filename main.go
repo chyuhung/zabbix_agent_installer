@@ -249,10 +249,10 @@ func strBuild(zabbixDirAbsPath string, fileAbsPath string) {
 	cmd := exec.Command("sed", "-i", args, fileAbsPath)
 	out, err := cmd.Output()
 	if err != nil {
-		logger("ERROR", "modify script failed "+err.Error())
+		logger("ERROR", fmt.Sprintf("modify %s failed "+err.Error(), fileAbsPath))
 		os.Exit(1)
 	}
-	logger("INFO", "modify script successful \n"+string(out))
+	logger("INFO", fmt.Sprintf("modify %s successful \n"+string(out), fileAbsPath))
 }
 
 func main() {
