@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -18,9 +19,6 @@ import (
 	"github.com/go-ini/ini"
 )
 
-// zabbix agent user
-// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
-// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
 var (
 	DefaultUser = "cloud"
 	LinuxURL    = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_linux/"
@@ -106,15 +104,6 @@ func isValue(v interface{}) bool {
 	return false
 }
 
-/*
-func removeDelimiter(s string) string {
-	s = strings.ReplaceAll(s, "\n", "")
-	s = strings.ReplaceAll(s, "\r", "")
-	s = strings.ReplaceAll(s, "\t", "")
-	return s
-}
-*/
-
 // 组装配置必要参数
 func scanParams() (serverIP string, serverPort string, agentUser string, agentDir string, agentIP string) {
 	// 接受命令
@@ -125,15 +114,6 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	flag.StringVar(&agentIP, "i", "", "zabbix agent ip,default is the main ipv4.")
 	// 转换
 	flag.Parse()
-	/*
-		// 去除特殊字符
-		serverIP = removeDelimiter(serverIP)
-		serverPort = removeDelimiter(serverPort)
-		agentUser = removeDelimiter(agentUser)
-		agentDir = removeDelimiter(agentDir)
-		agentIP = removeDelimiter(agentIP)
-	*/
-
 	// serverIP,必要参数
 	if !isValue(serverIP) {
 		logger("ERROR", "must input zabbix server ip")
@@ -148,7 +128,6 @@ func scanParams() (serverIP string, serverPort string, agentUser string, agentDi
 	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
 	if agentUser != getCurrUser() {
-		fmt.Print([]byte(agentUser), []byte(getCurrUser()))
 		if agentUser == DefaultUser {
 			logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
@@ -197,27 +176,6 @@ func fetchPackage(url string, saveAbsPath string) {
 	logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
 	logger("INFO", "Download successful")
 }
-
-/*
-// 解压安装包
-
-	func unzipPackage(fileAbsPath string, dirAbsPath string) {
-		// 检查文件是否存在
-		if !isFileExist(fileAbsPath) {
-			logger("INFO", "package is not found,starting to download")
-			fetchPackage(LinuxURL, fileAbsPath)
-		}
-		// 使用linux命令解压
-		logger("INFO", "starting to unzip package")
-		cmd := exec.Command("tar", "--directory", dirAbsPath, "-xzf", fileAbsPath)
-		_, err := cmd.Output()
-		if err != nil {
-			logger("ERROR", "unzip archive failed "+err.Error())
-			os.Exit(1)
-		}
-		logger("INFO", "unzip package successful")
-	}
-*/
 func writeINI(k string, v string, fileAbsPath string) {
 	cfg, err := ini.Load(fileAbsPath)
 	if err != nil {
@@ -265,16 +223,64 @@ func startAgent(scriptAbsPath string) {
 	logger("INFO", "start agent successful")
 }
 
-// 修改启动脚本
-func strBuild(zabbixDirAbsPath string, fileAbsPath string) {
-	args := "s#%change_basepath%#" + zabbixDirAbsPath + "#g"
-	cmd := exec.Command("sed", "-i", args, fileAbsPath)
-	_, err := cmd.Output()
+func modScript(filePath string, args map[string]string) error {
+	tempFileAbsPath := filePath + ".temp"
+	fi, err := os.Open(filePath)
 	if err != nil {
-		logger("ERROR", fmt.Sprintf("modify %s failed "+err.Error(), fileAbsPath))
-		os.Exit(1)
+		return err
 	}
-	logger("INFO", fmt.Sprintf("modify %s successful", fileAbsPath))
+	defer func() {
+		if err = fi.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	fo, err := os.OpenFile(tempFileAbsPath, os.O_CREATE|os.O_WRONLY, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err = fo.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	br := bufio.NewReader(fi)
+	bw := bufio.NewWriter(fo)
+	logger("INFO", "starting to modify zabbix script")
+	for {
+		var newline string
+		line, _, err := br.ReadLine()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		for k, v := range args {
+			newline = strings.ReplaceAll(string(line), k, v)
+		}
+		_, err = bw.WriteString(newline + "\n")
+		if err != nil {
+			return err
+		}
+	}
+	// 写入文件
+	err = bw.Flush()
+	if err != nil {
+		return err
+	}
+	// 移除旧文件
+	err = os.Remove(filePath)
+	if err != nil {
+		return err
+	} else { // 重命名新文件
+		err = os.Rename(tempFileAbsPath, filePath)
+		if err != nil {
+			return err
+		}
+	}
+	logger("INFO", "modify script successful")
+	return nil
 }
 
 func main() {
@@ -317,7 +323,10 @@ func main() {
 	writeINI("Hostname", AgentIP, zabbixConfAbsPath)
 
 	// 修改启动脚本
-	strBuild(zabbixDirAbsPath, zabbixScriptAbsPath)
+	args := make(map[string]string, 1)
+	args["%change_basepath%"] = zabbixDirAbsPath
+	//strBuild(zabbixDirAbsPath, zabbixScriptAbsPath)
+	modScript(zabbixScriptAbsPath, args)
 
 	// 启动zabbix
 	startAgent(zabbixScriptAbsPath)

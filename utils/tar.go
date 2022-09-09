@@ -72,35 +72,9 @@ func Untar(src string, dst string) error {
 
 // 打包
 func Tar(src string, dst string) error {
-	f, err := os.Open(src)
+	_, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	//var buf bytes.Buffer
-	tw := tar.NewWriter(f)
-	var files = []struct {
-		Name, Body string
-	}{
-		{"readme.txt", "This archive contains some text files."},
-		{"gopher.txt", "Gopher names:\nGeorge\nGeoffrey\nGonzo"},
-		{"todo.txt", "Get animal handling license."},
-	}
-	for _, file := range files {
-		hdr := &tar.Header{
-			Name: file.Name,
-			Mode: 0600,
-			Size: int64(len(file.Body)),
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
-		if _, err := tw.Write([]byte(file.Body)); err != nil {
-			return err
-		}
-	}
-	if err := tw.Close(); err != nil {
-		return err
-	}
-
 	return nil
 }
