@@ -246,7 +246,6 @@ func modScript(filePath string, args map[string]string) error {
 	}()
 	br := bufio.NewReader(fi)
 	bw := bufio.NewWriter(fo)
-	logger("INFO", "starting to modify zabbix script")
 	for {
 		var newline string
 		line, _, err := br.ReadLine()
@@ -279,7 +278,6 @@ func modScript(filePath string, args map[string]string) error {
 			return err
 		}
 	}
-	logger("INFO", "modify script successful")
 	return nil
 }
 
@@ -325,8 +323,9 @@ func main() {
 	// 修改启动脚本
 	args := make(map[string]string, 1)
 	args["%change_basepath%"] = zabbixDirAbsPath
-	//strBuild(zabbixDirAbsPath, zabbixScriptAbsPath)
+	logger("INFO", "starting to modify zabbix script")
 	modScript(zabbixScriptAbsPath, args)
+	logger("INFO", "modify script successful")
 
 	// 启动zabbix
 	startAgent(zabbixScriptAbsPath)
