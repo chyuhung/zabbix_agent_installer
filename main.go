@@ -223,7 +223,7 @@ func startAgent(scriptAbsPath string) {
 	logger("INFO", "start agent successful")
 }
 
-func modScript(filePath string, args map[string]string) error {
+func modFile(filePath string, args map[string]string) error {
 	tempFileAbsPath := filePath + ".temp"
 	fi, err := os.Open(filePath)
 	if err != nil {
@@ -248,15 +248,15 @@ func modScript(filePath string, args map[string]string) error {
 	bw := bufio.NewWriter(fo)
 	for {
 		var newline string
-		line, _, err := br.ReadLine()
+		line, err := br.ReadString('\n')
 		if err == io.EOF {
 			break
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
-		for k, v := range args {
-			newline = strings.ReplaceAll(string(line), k, v)
+		for k, v := range args { //逐个替换kv
+			newline = strings.ReplaceAll(line, k, v)
+			line = newline
 		}
 		_, err = bw.WriteString(newline + "\n")
 		if err != nil {
@@ -295,10 +295,7 @@ func main() {
 	packageAbsPath := filepath.Join(AgentDir, "zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz")
 	zabbixDirAbsPath := filepath.Join(AgentDir, "zabbix_agentd")
 	zabbixScriptAbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
-	zabbixConfDirAbsPath := filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf.d")
 	zabbixConfAbsPath := filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
-	zabbixPidFileAbsPath := filepath.Join(zabbixDirAbsPath, "/zabbix_agentd.pid")
-	zabbixLogFileAbsPath := filepath.Join(zabbixDirAbsPath, "/zabbix_agentd.log")
 
 	if isFileExist(packageAbsPath) {
 		// 解压安装包,解压到当前文件夹
@@ -314,17 +311,26 @@ func main() {
 	}
 
 	// 写入配置
-	writeINI("Include", zabbixConfDirAbsPath, zabbixConfAbsPath)
-	writeINI("PidFile", zabbixPidFileAbsPath, zabbixConfAbsPath)
-	writeINI("LogFile", zabbixLogFileAbsPath, zabbixConfAbsPath)
-	writeINI("ServerActive", ServerIP, zabbixConfAbsPath)
-	writeINI("Hostname", AgentIP, zabbixConfAbsPath)
+	confArgsMap := make(map[string]string, 3)
+	confArgsMap["%change_basepath%"] = zabbixDirAbsPath
+	confArgsMap["%change_serverip%"] = ServerIP
+	confArgsMap["%change_hostname%"] = AgentIP
+	fmt.Println(confArgsMap)
+	logger("INFO", "starting to modify zabbix conf")
+	err := modFile(zabbixConfAbsPath, confArgsMap)
+	if err != nil {
+		logger("ERROR", err.Error())
+	}
+	logger("INFO", "modify zabbix conf successful")
 
 	// 修改启动脚本
-	args := make(map[string]string, 1)
-	args["%change_basepath%"] = zabbixDirAbsPath
+	scriptArgsMap := make(map[string]string, 1)
+	scriptArgsMap["%change_basepath%"] = zabbixDirAbsPath
 	logger("INFO", "starting to modify zabbix script")
-	modScript(zabbixScriptAbsPath, args)
+	err = modFile(zabbixScriptAbsPath, scriptArgsMap)
+	if err != nil {
+		logger("ERROR", err.Error())
+	}
 	logger("INFO", "modify script successful")
 
 	// 启动zabbix
