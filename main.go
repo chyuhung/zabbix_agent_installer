@@ -134,10 +134,6 @@ func scanParams() (server string, port string, user string, dir string, agent st
 			os.Exit(1)
 		}
 	}
-	// serverPort
-	if isUnreach(server, port) {
-		logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
-	}
 	// agentDir
 	if isEmptyStr(dir) {
 		dir, err = getUserPath()
@@ -161,6 +157,13 @@ func scanParams() (server string, port string, user string, dir string, agent st
 		logger("ERROR", "invalid agent ip")
 		os.Exit(1)
 	}
+	// serverPort
+	if isUnreach(server, port) {
+		logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
+	} else {
+		logger("INFO", fmt.Sprintf("connect to %s:%s suscceful", server, port))
+	}
+
 	return server, port, user, dir, agent
 }
 
@@ -300,7 +303,7 @@ func main() {
 	if isFileExist(packageAbsPath) {
 		// 解压安装包,解压到当前文件夹
 		logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
-		err := utils.Untar(packageAbsPath, "")
+		err := utils.Untar(packageAbsPath, AgentDir)
 		if err != nil {
 			logger("", "ungzip failed "+err.Error())
 			return
@@ -315,22 +318,22 @@ func main() {
 	confArgsMap["%change_basepath%"] = zabbixDirAbsPath
 	confArgsMap["%change_serverip%"] = ServerIP
 	confArgsMap["%change_hostname%"] = AgentIP
-	logger("INFO", "starting to modify zabbix conf")
+	logger("INFO", "starting to modify zabbix agent conf")
 	err := modFile(zabbixConfAbsPath, confArgsMap)
 	if err != nil {
 		logger("ERROR", err.Error())
 	}
-	logger("INFO", "modify zabbix conf successful")
+	logger("INFO", "modify zabbix agent conf successful")
 
 	// 修改启动脚本
 	scriptArgsMap := make(map[string]string, 1)
 	scriptArgsMap["%change_basepath%"] = zabbixDirAbsPath
-	logger("INFO", "starting to modify zabbix script")
+	logger("INFO", "starting to modify zabbix agent script")
 	err = modFile(zabbixScriptAbsPath, scriptArgsMap)
 	if err != nil {
 		logger("ERROR", err.Error())
 	}
-	logger("INFO", "modify script successful")
+	logger("INFO", "modify zabbix agent script successful")
 
 	// 启动zabbix
 	startAgent(zabbixScriptAbsPath)
