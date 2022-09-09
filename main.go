@@ -161,7 +161,7 @@ func scanParams() (server string, port string, user string, dir string, agent st
 	if isUnreach(server, port) {
 		logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
 	} else {
-		logger("INFO", fmt.Sprintf("connect to %s:%s suscceful", server, port))
+		logger("INFO", fmt.Sprintf("connect to %s:%s successful", server, port))
 	}
 
 	return server, port, user, dir, agent
@@ -204,8 +204,9 @@ func isFileExist(fileAbsPath string) bool {
 
 // 检查进程
 func checkAgentProcess() {
-	c1 := exec.Command("sh", "-c", "ps -ef|grep -v grep |grep zabbix|grep -v installer")
-	out, err := c1.Output()
+
+	c2 := exec.Command("sh", "-c", "ps -ef|grep -E 'UID|zabbix' |grep -Ev 'installer|grep'")
+	out, err := c2.Output()
 	if err != nil {
 		logger("ERROR", "run ps failed "+err.Error())
 		return
