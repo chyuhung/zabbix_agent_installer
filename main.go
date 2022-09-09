@@ -39,35 +39,32 @@ func logger(level string, log string) {
 }
 
 // 获取主ip
-func getAgentIP() string {
+func GetHostMainIP() (string, error) {
 	conn, err := net.Dial("udp", "8.8.8.8:53")
 	if err != nil {
-		logger("ERROR", "get agent ip failed "+err.Error())
-		os.Exit(1)
+		return "", err
 	}
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return strings.Split(localAddr.String(), ":")[0]
+	return strings.Split(localAddr.String(), ":")[0], nil
 }
 
 // 获取当前用户用户名
-func getCurrUser() string {
+func getCurrUser() (string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
-		logger("ERROR", "get current user failed "+err.Error())
+		return "", err
 	}
-	logger("INFO", fmt.Sprintf("current user is %s", currentUser.Username))
-	return currentUser.Username
+	return currentUser.Username, nil
 }
 
 // 获取当前用户家目录
-func getUserPath() string {
+func getUserPath() (string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
-		logger("ERROR", "get current user home dir failed "+err.Error())
-		os.Exit(1)
+		return "", err
 	}
-	return currentUser.HomeDir
+	return currentUser.HomeDir, nil
 }
 
 // 判断ip是否合规
@@ -81,21 +78,20 @@ func isIPv4(ipv4 string) bool {
 }
 
 // 测试ip是否可达
-func isReachable(ipv4 string, port string) bool {
+func isUnreach(ipv4 string, port string) bool {
 	addr := net.JoinHostPort(ipv4, port)
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
-		logger("WARN", fmt.Sprintf("connect to %s failed %s", ipv4, err.Error()))
-		return false
+		return true
 	}
 	defer conn.Close()
-	return conn != nil
+	return false
 }
 
 // 是否有值
-func isValue(v interface{}) bool {
+func isEmptyStr(v interface{}) bool {
 	if f, ok := v.(string); ok {
-		if f != "" {
+		if f == "" {
 			return true
 		}
 	}
@@ -103,50 +99,69 @@ func isValue(v interface{}) bool {
 }
 
 // 组装配置必要参数
-func scanParams() (serverIP string, serverPort string, agentUser string, agentDir string, agentIP string) {
+func scanParams() (server string, port string, user string, dir string, agent string) {
 	// 接受命令
-	flag.StringVar(&serverIP, "s", "", "zabbix server ip,you must input server ip.")
-	flag.StringVar(&serverPort, "p", "8001", "zabbix server port.")
-	flag.StringVar(&agentUser, "u", "cloud", "zabbix agent user.")
-	flag.StringVar(&agentDir, "d", "", "zabbix agent directory,default is current user's home directory.")
-	flag.StringVar(&agentIP, "i", "", "zabbix agent ip,default is the main ipv4.")
+	flag.StringVar(&server, "s", "", "zabbix server ip.")
+	flag.StringVar(&port, "p", "8001", "zabbix server port.")
+	flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
+	flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
+	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
 	// 转换
 	flag.Parse()
 	// serverIP,必要参数
-	if !isValue(serverIP) {
+	if isEmptyStr(server) {
 		logger("ERROR", "must input zabbix server ip")
 		os.Exit(1)
-	}
-	if !isIPv4(serverIP) {
-		logger("ERROR", "invalid ip")
+	} else if !isIPv4(server) {
+		logger("ERROR", "invalid server ip")
 		os.Exit(1)
 	}
 
 	// agentUser
 	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
 	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
-	if agentUser != getCurrUser() {
-		if agentUser == DefaultUser {
+	currUser, err := getCurrUser()
+	if err != nil {
+		logger("ERROR", "get current user failed "+err.Error())
+		os.Exit(1)
+	}
+	if currUser != user {
+		if currUser == DefaultUser {
 			logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
 		} else {
-			logger("ERROR", "switch to the user you specified then install")
+			logger("ERROR", fmt.Sprintf("switch to the user %s then install", user))
 			os.Exit(1)
 		}
 	}
 	// serverPort
-	if !isReachable(serverIP, serverPort) {
-		logger("WARN", fmt.Sprintf("%s:%s is unreachable", serverIP, serverPort))
+	if isUnreach(server, port) {
+		logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
 	}
 	// agentDir
-	if !isValue(agentDir) {
-		agentDir = getUserPath()
+	if isEmptyStr(dir) {
+		dir, err = getUserPath()
+		if err != nil {
+			logger("ERROR", "get current user home dir failed "+err.Error())
+			os.Exit(1)
+		}
+	} else {
+		// 格式化成标准写法
+		dir = filepath.Join(dir)
 	}
+
 	// agentIP
-	if !isValue(agentIP) {
-		agentIP = getAgentIP()
+	if isEmptyStr(agent) {
+		agent, err = GetHostMainIP()
+		if err != nil {
+			logger("ERROR", "get agent ip failed "+err.Error())
+			os.Exit(1)
+		}
+	} else if !isIPv4(agent) {
+		logger("ERROR", "invalid agent ip")
+		os.Exit(1)
 	}
-	return serverIP, serverPort, agentUser, agentDir, agentIP
+	return server, port, user, dir, agent
 }
 
 // 下载安装包
@@ -207,6 +222,7 @@ func startAgent(scriptAbsPath string) {
 	logger("INFO", "start agent successful")
 }
 
+// 编辑文件
 func modFile(filePath string, args map[string]string) error {
 	tempFileAbsPath := filePath + ".temp"
 	fi, err := os.Open(filePath)
@@ -299,7 +315,6 @@ func main() {
 	confArgsMap["%change_basepath%"] = zabbixDirAbsPath
 	confArgsMap["%change_serverip%"] = ServerIP
 	confArgsMap["%change_hostname%"] = AgentIP
-	fmt.Println(confArgsMap)
 	logger("INFO", "starting to modify zabbix conf")
 	err := modFile(zabbixConfAbsPath, confArgsMap)
 	if err != nil {
