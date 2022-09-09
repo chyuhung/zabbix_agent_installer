@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 	"zabbix_agent_installer/utils"
-
-	"github.com/go-ini/ini"
 )
 
 var (
@@ -176,20 +174,6 @@ func fetchPackage(url string, saveAbsPath string) {
 	logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
 	logger("INFO", "Download successful")
 }
-func writeINI(k string, v string, fileAbsPath string) {
-	cfg, err := ini.Load(fileAbsPath)
-	if err != nil {
-		logger("ERROR", "write config file failed "+err.Error())
-		return
-	}
-	cfg.Section("").Key(k).SetValue(v)
-	err = cfg.SaveTo(fileAbsPath)
-	if err != nil {
-		logger("ERROR", "save config file failed "+err.Error())
-		return
-	}
-}
-
 func isFileExist(fileAbsPath string) bool {
 	_, err := os.Stat(fileAbsPath)
 	if err != nil {
