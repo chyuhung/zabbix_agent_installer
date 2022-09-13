@@ -19,6 +19,7 @@ import (
 	"zabbix_agent_installer/utils"
 
 	"github.com/shirou/gopsutil/process"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -330,9 +331,32 @@ func GetProcessName() (pname []string) {
 	return pname
 }
 
-// GetPackageName returns the name of the package
-func GetPackageName() string {
-	return ""
+func visit(links []string, n *html.Node) []string {
+	if n.Type == html.ElementNode && n.Data == "a" {
+		for _, a := range n.Attr {
+			if a.Key == "href" {
+				links = append(links, a.Val)
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		links = visit(links, c)
+	}
+	return links
+}
+
+// GetPackageLink returns the name of the package
+func GetPackageLink(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	doc, _ := html.Parse(resp.Body)
+	for _, link := range visit(nil, doc) {
+		fmt.Println(link)
+	}
+	return "", nil
 }
 
 /*
