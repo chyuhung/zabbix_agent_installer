@@ -4,19 +4,24 @@ import (
 	"testing"
 )
 
-func TestGetOSType(t *testing.T) {
-	OSType := GetOSType()
-	t.Log(OSType)
-}
-
-func TestGetOSArch(t *testing.T) {
-	OSArch := GetOSArch()
-	t.Log(OSArch)
-}
-
 func TestGetRunTimeProcessList(t *testing.T) {
 	pname := GetProcessName()
 	for n := range pname {
 		t.Log(n)
 	}
+}
+
+func TestContainsOr(t *testing.T) {
+	result := ContainsOr("windows", []string{"win", "linux", "w", "windows"})
+	t.Log(result)
+	result = ContainsOr("windows", []string{"winx", "linux", "ww", "windowsxp"})
+	t.Log(result)
+}
+
+func TestContainsAnd(t *testing.T) {
+	result := ContainsAnd("windows", []string{"win", "wi", "w", "windows"})
+	t.Log(result)
+	result = ContainsAnd("windows", []string{"win", "linux", "w", "windows"})
+	t.Log(result)
+
 }

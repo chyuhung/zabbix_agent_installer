@@ -249,7 +249,13 @@ func fetchPackage(url string, saveAbsPath string) {
 		logger("ERROR", "download package failed "+err.Error())
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+	}()
 	// 创建文件，从url中读取文件名
 	filename := path.Base(url)
 	logger("INFO", fmt.Sprintf("starting to download %s from %s", filename, url))
@@ -258,7 +264,13 @@ func fetchPackage(url string, saveAbsPath string) {
 		logger("ERROR", "download package failed "+err.Error())
 		os.Exit(1)
 	}
-	defer out.Close()
+	defer func() {
+		err := out.Close()
+		if err != nil {
+			logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+	}()
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
 		logger("ERROR", "download package failed "+err.Error())
@@ -292,34 +304,6 @@ func startAgent(scriptAbsPath string) {
 	logger("INFO", "start agent successful")
 }
 
-// GetOSType gets the OS type, such as "windows" or "linux"
-func GetOSType() string {
-	return runtime.GOOS
-}
-
-// GetOSArch gets the OS architecture, such as "386" or "amd64"
-//
-//	linux/386
-//	linux/amd64
-//	linux/arm
-//	linux/arm64
-//	linux/loong64
-//	linux/mips
-//	linux/mips64
-//	linux/mips64le
-//	linux/mipsle
-//	linux/ppc64
-//	linux/ppc64le
-//	linux/riscv64
-//	linux/s390x
-//	windows/386
-//	windows/amd64
-//	windows/arm
-//	windows/arm64
-func GetOSArch() string {
-	return runtime.GOARCH
-}
-
 // GetProcessName returns the list of runtime processes
 func GetProcessName() (pname []string) {
 	pids, _ := process.Pids()
@@ -331,6 +315,7 @@ func GetProcessName() (pname []string) {
 	return pname
 }
 
+// source:http://www.codebaoku.com/it-go/it-go-168428.html
 func visit(links []string, n *html.Node) []string {
 	if n.Type == html.ElementNode && n.Data == "a" {
 		for _, a := range n.Attr {
@@ -345,20 +330,82 @@ func visit(links []string, n *html.Node) []string {
 	return links
 }
 
-// GetPackageLinks returns the name of the package
-func GetPackageLinks(url string) ([]string, error) {
+// GetURLLinks returns the name of the package
+func GetURLLinks(url string) []string {
 	var links []string
 	resp, err := http.Get(url)
 	if err != nil {
-		return []string{}, err
+		logger("ERROR", err.Error())
+		return nil
 	}
 	defer resp.Body.Close()
 	doc, _ := html.Parse(resp.Body)
 	for _, link := range visit(nil, doc) {
-		//fmt.Println(link)
-		links = append(links, link)
+		links = append(links, url+link)
 	}
-	return links, nil
+	return links
+}
+
+// once s not contains the one of ss , return false
+func ContainsAnd(s string, ss []string) bool {
+	for i := range ss {
+		if !strings.Contains(s, ss[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// if s contains one of ss, return true
+func ContainsOr(s string, ss []string) bool {
+	for i := range ss {
+		if strings.Contains(s, ss[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// GetZabbixAgentLink returns the zabbix agent link
+func GetZabbixAgentLink(links []string) string {
+	var zaLinks []string
+	// 筛选包含关键词zabbix-agent 的链接
+	for i := range links {
+		if ContainsOr(links[i], []string{"zabbix-agent", "zabbix_agent"}) {
+			zaLinks = append(zaLinks, links[i])
+		}
+	}
+	// 系统类型
+	ot := runtime.GOOS
+	// 架构类型
+	oa := runtime.GOARCH
+	var avaLinks []string
+
+	switch ot {
+	case "windows":
+		for i := range zaLinks {
+			if ContainsOr(links[i], []string{"win", "amd64"}) {
+				avaLinks = append(avaLinks, zaLinks[i])
+			}
+		}
+	case "linux":
+		for i := range zaLinks {
+			if oa == "amd64" {
+				if ContainsOr(zaLinks[i], []string{"amd64", "x86_64"}) {
+					avaLinks = append(avaLinks, zaLinks[i])
+				}
+			} else if oa == "386" {
+				if strings.Contains(zaLinks[i], "386") {
+					avaLinks = append(avaLinks, zaLinks[i])
+				}
+			}
+		}
+
+	}
+	for i := range avaLinks {
+		fmt.Println(avaLinks[i])
+	}
+	return avaLinks[len(avaLinks)-1]
 }
 
 /*
@@ -377,11 +424,12 @@ zabbix_agentd-5.0.15-windows-amd64.zip
 
 func main() {
 	url := "https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/4.0/rhel/6/x86_64/"
-	links, _ := GetPackageLinks(url)
-	for i := range links {
-		fmt.Println(links[i])
-	}
+	URLs := GetURLLinks(url)
+	zaLink := GetZabbixAgentLink(URLs)
+	fmt.Println("zaLink:", zaLink)
+	fetchPackage(zaLink, "/home/cloud/zabbix_agent_installer/tmp/")
 	return
+
 	/*
 		pname := GetProcessName()
 		for _, p := range pname {
@@ -414,7 +462,8 @@ func main() {
 		}
 		logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
 	} else {
-		fetchPackage(LinuxURL, packageAbsPath)
+		// 下载安装包
+		fetchPackage(zaLink, packageAbsPath)
 	}
 
 	// 写入配置
