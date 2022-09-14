@@ -345,18 +345,20 @@ func visit(links []string, n *html.Node) []string {
 	return links
 }
 
-// GetPackageLink returns the name of the package
-func GetPackageLink(url string) (string, error) {
+// GetPackageLinks returns the name of the package
+func GetPackageLinks(url string) ([]string, error) {
+	var links []string
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", err
+		return []string{}, err
 	}
 	defer resp.Body.Close()
 	doc, _ := html.Parse(resp.Body)
 	for _, link := range visit(nil, doc) {
-		fmt.Println(link)
+		//fmt.Println(link)
+		links = append(links, link)
 	}
-	return "", nil
+	return links, nil
 }
 
 /*
@@ -374,6 +376,12 @@ zabbix_agentd-5.0.15-windows-amd64.zip
 */
 
 func main() {
+	url := "https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/4.0/rhel/6/x86_64/"
+	links, _ := GetPackageLinks(url)
+	for i := range links {
+		fmt.Println(links[i])
+	}
+	return
 	/*
 		pname := GetProcessName()
 		for _, p := range pname {
