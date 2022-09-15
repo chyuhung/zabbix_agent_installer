@@ -255,8 +255,8 @@ func fetchPackage(url string, saveAbsPath string) string {
 	}()
 	// 创建文件，从url中读取文件名
 	filename := path.Base(url)
-	logger("INFO", fmt.Sprintf("starting to download %s from %s", filename, url))
-	out, err := os.OpenFile(saveAbsPath+filename, os.O_CREATE|os.O_RDWR, 0755)
+	logger("INFO", fmt.Sprintf("starting to download %s", filename))
+	out, err := os.OpenFile(filepath.Join(saveAbsPath, filename), os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		logger("ERROR", "download package failed "+err.Error())
 		os.Exit(1)
@@ -487,6 +487,7 @@ func main() {
 			logger("ERROR", "unknown platform")
 			os.Exit(1)
 		}
+		url = "http://10.191.101.254/zabbix-agent/"
 		// 获取链接
 		logger("INFO", fmt.Sprintf("url: %s", url))
 		URLs, err := GetURLLinks(url)
