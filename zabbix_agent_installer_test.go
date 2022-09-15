@@ -4,26 +4,29 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"zabbix_agent_installer/myos"
+	"zabbix_agent_installer/mystring"
+	"zabbix_agent_installer/script"
 )
 
 func TestGetRunTimeProcessList(t *testing.T) {
-	p := GetProcess()
+	p := myos.GetProcess()
 	for k, v := range p {
 		t.Log("pid:", k, "name:", v)
 	}
 }
 
 func TestContainsOr(t *testing.T) {
-	result := ContainsOr("windows", []string{"win", "linux", "w", "windows"})
+	result := mystring.IsContainsOr("windows", []string{"win", "linux", "w", "windows"})
 	t.Log(result)
-	result = ContainsOr("windows", []string{"winx", "linux", "ww", "windowsxp"})
+	result = mystring.IsContainsOr("windows", []string{"winx", "linux", "ww", "windowsxp"})
 	t.Log(result)
 }
 
 func TestContainsAnd(t *testing.T) {
-	result := ContainsAnd("windows", []string{"win", "wi", "w", "windows"})
+	result := mystring.IsContainsAnd("windows", []string{"win", "wi", "w", "windows"})
 	t.Log(result)
-	result = ContainsAnd("windows", []string{"win", "linux", "w", "windows"})
+	result = mystring.IsContainsAnd("windows", []string{"win", "linux", "w", "windows"})
 	t.Log(result)
 
 }
@@ -35,7 +38,7 @@ func TestCheckProcess(t *testing.T) {
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	checkAgentProcess()
+	script.ShowAgentProcess()
 
 	t.Log("check ok")
 }
