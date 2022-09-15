@@ -1,13 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"testing"
+	"time"
 )
 
 func TestGetRunTimeProcessList(t *testing.T) {
-	pname := GetProcessName()
-	for n := range pname {
-		t.Log(n)
+	p := GetProcess()
+	for k, v := range p {
+		t.Log("pid:", k, "name:", v)
 	}
 }
 
@@ -24,4 +26,16 @@ func TestContainsAnd(t *testing.T) {
 	result = ContainsAnd("windows", []string{"win", "linux", "w", "windows"})
 	t.Log(result)
 
+}
+
+func TestCheckProcess(t *testing.T) {
+	go func() {
+		for {
+			fmt.Println("Checking")
+			time.Sleep(1 * time.Second)
+		}
+	}()
+	checkAgentProcess()
+
+	t.Log("check ok")
 }

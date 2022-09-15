@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -24,15 +25,11 @@ import (
 
 var (
 	DefaultUser = "cloud"
-	LinuxURL    = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_linux/"
-	WinURL      = "http://10.191.22.9:8001/software/zabbix-agent4.0/zabbix_agentd_windows/"
-)
-var (
-	ServerIP   string
-	ServerPort string
-	AgentUser  string
-	AgentDir   string
-	AgentIP    string
+	ServerIP    string
+	ServerPort  string
+	AgentUser   string
+	AgentDir    string
+	AgentIP     string
 )
 
 // 日志打印
@@ -92,15 +89,15 @@ func isEmptyStr(v interface{}) bool {
 	return false
 }
 
-// IsFileExist returns true if the given file exists,otherwise returns false.
-func IsFileExist(fileAbsPath string) bool {
+// IsFileNotExist returns true if the given file exists,otherwise returns false.
+func IsFileNotExist(fileAbsPath string) bool {
 	_, err := os.Stat(fileAbsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // ReplaceWords edits the given file,replacing all k with v.
@@ -243,7 +240,7 @@ func scanParams() (server string, port string, user string, dir string, agent st
 }
 
 // 下载安装包
-func fetchPackage(url string, saveAbsPath string) {
+func fetchPackage(url string, saveAbsPath string) string {
 	resp, err := http.Get(url)
 	if err != nil {
 		logger("ERROR", "download package failed "+err.Error())
@@ -278,11 +275,11 @@ func fetchPackage(url string, saveAbsPath string) {
 	}
 	logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
 	logger("INFO", "Download successful")
+	return filename
 }
 
 // 检查进程
 func checkAgentProcess() {
-
 	c2 := exec.Command("sh", "-c", "ps -ef|grep -E 'UID|zabbix' |grep -Ev 'installer|grep'")
 	out, err := c2.Output()
 	if err != nil {
@@ -304,15 +301,16 @@ func startAgent(scriptAbsPath string) {
 	logger("INFO", "start agent successful")
 }
 
-// GetProcessName returns the list of runtime processes
-func GetProcessName() (pname []string) {
+// GetProcess returns the list of runtime processes
+func GetProcess() map[int32]string {
+	p := make(map[int32]string, 30)
 	pids, _ := process.Pids()
 	for _, pid := range pids {
 		pn, _ := process.NewProcess(pid)
 		name, _ := pn.Name()
-		pname = append(pname, name)
+		p[pid] = name
 	}
-	return pname
+	return p
 }
 
 // source:http://www.codebaoku.com/it-go/it-go-168428.html
@@ -331,19 +329,18 @@ func visit(links []string, n *html.Node) []string {
 }
 
 // GetURLLinks returns the name of the package
-func GetURLLinks(url string) []string {
+func GetURLLinks(url string) ([]string, error) {
 	var links []string
 	resp, err := http.Get(url)
 	if err != nil {
-		logger("ERROR", err.Error())
-		return nil
+		return nil, err
 	}
 	defer resp.Body.Close()
 	doc, _ := html.Parse(resp.Body)
 	for _, link := range visit(nil, doc) {
 		links = append(links, url+link)
 	}
-	return links
+	return links, nil
 }
 
 // once s not contains the one of ss , return false
@@ -384,59 +381,81 @@ func GetZabbixAgentLink(links []string) string {
 	switch ot {
 	case "windows":
 		for i := range zaLinks {
-			if ContainsOr(links[i], []string{"win", "amd64"}) {
+			if ContainsOr(links[i], []string{"amd64"}) && ContainsAnd(zaLinks[i], []string{"win"}) {
 				avaLinks = append(avaLinks, zaLinks[i])
+			} else {
+				logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
 			}
 		}
 	case "linux":
 		for i := range zaLinks {
 			if oa == "amd64" {
-				if ContainsOr(zaLinks[i], []string{"amd64", "x86_64"}) {
+				if ContainsOr(zaLinks[i], []string{"amd64", "x86_64"}) && ContainsAnd(zaLinks[i], []string{"linux"}) {
 					avaLinks = append(avaLinks, zaLinks[i])
 				}
 			} else if oa == "386" {
-				if strings.Contains(zaLinks[i], "386") {
+				if ContainsOr(zaLinks[i], []string{"386"}) && ContainsAnd(zaLinks[i], []string{"linux"}) {
 					avaLinks = append(avaLinks, zaLinks[i])
 				}
+			} else {
+				logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
 			}
 		}
-
+	default:
+		logger("ERROR", fmt.Sprintf("unknown OS type:%s", ot))
 	}
-	for i := range avaLinks {
+	logger("INFO", "get links done")
+	/*for i := range avaLinks {
 		fmt.Println(avaLinks[i])
-	}
+	}*/
 	return avaLinks[len(avaLinks)-1]
 }
 
-/*
-package list
+// 获取路径下文件名称,忽略文件夹
+func GetFileNames(absPath string) ([]string, error) {
+	var myFiles []string
+	files, err := ioutil.ReadDir(absPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			myFiles = append(myFiles, file.Name())
+		}
+	}
+	return myFiles, nil
+}
 
-linix
-zabbix-agent-4.0.12-1.el5.i386.rpm
-zabbix-agent-4.0.15-1.el8.x86_64.rpm
-zabbix-agent-4.0.15-1.el12.x86_64.rpm
-zabbix-agentd-4.0.32-1.linux.aarch64.tar.gz
-
-windows
-zabbix_agents-4.0.7-win-amd64.zip
-zabbix_agentd-5.0.15-windows-amd64.zip
-*/
+// 筛选zabbix安装包名称
+func GetZabbixAgentPackageName(filenames []string) (string, error) {
+	var avaFilenames []string
+	for _, filename := range filenames {
+		if ContainsAnd(filename, []string{"zabbix", "agent"}) && ContainsOr(filename, []string{".tar.gz", ".zip"}) {
+			switch runtime.GOOS {
+			case "linux":
+				if strings.Contains(filename, "linux") {
+					avaFilenames = append(avaFilenames, filename)
+				}
+			case "windows":
+				if strings.Contains(filename, "win") {
+					avaFilenames = append(avaFilenames, filename)
+				}
+			default:
+				logger("ERROR", fmt.Sprintf("unknown os type: %s", runtime.GOOS))
+			}
+		}
+	}
+	if len(avaFilenames) == 0 {
+		return "", fmt.Errorf("no package found")
+	}
+	return avaFilenames[len(avaFilenames)-1], nil
+}
 
 func main() {
-	url := "https://mirrors.tuna.tsinghua.edu.cn/zabbix/zabbix/4.0/rhel/6/x86_64/"
-	URLs := GetURLLinks(url)
-	zaLink := GetZabbixAgentLink(URLs)
-	fmt.Println("zaLink:", zaLink)
-	fetchPackage(zaLink, "/home/cloud/zabbix_agent_installer/tmp/")
-	return
+	LinuxURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
+	WinURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
+	url := "http://10.191.101.254/zabbix-agent/"
 
-	/*
-		pname := GetProcessName()
-		for _, p := range pname {
-			fmt.Println(p)
-		}
-		return
-	*/
 	// 获取关键参数
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := scanParams()
 	// 输出配置信息
@@ -445,26 +464,61 @@ func main() {
 	logger("INFO", fmt.Sprintf("AgentUser:%s", AgentUser))
 	logger("INFO", fmt.Sprintf("AgentDir:%s", AgentDir))
 	logger("INFO", fmt.Sprintf("AgentIP:%s", AgentIP))
+	// 检查安装包
+	filenames, err := GetFileNames(AgentDir)
+	if err != nil {
+		logger("", err.Error())
+		os.Exit(1)
+	}
+	packageName, err := GetZabbixAgentPackageName(filenames)
+	if err != nil {
+		logger("", err.Error())
+		// 目录下无可用安装包
+		logger("INFO", "no package found,starting to download...")
+		logger("INFO", fmt.Sprintf("os type: %s", runtime.GOOS))
+		switch runtime.GOOS {
+		case "linux":
+			logger("INFO", "linux is supported")
+			url = LinuxURL
+		case "windows":
+			logger("INFO", "windows is supported")
+			url = WinURL
+		default:
+			logger("ERROR", "unknown platform")
+			os.Exit(1)
+		}
+		// 获取链接
+		logger("INFO", fmt.Sprintf("url: %s", url))
+		URLs, err := GetURLLinks(url)
+		if err != nil {
+			logger("", err.Error())
+			os.Exit(1)
+		}
+		/*for i := range URLs {
+			fmt.Printf(" %s\n", URLs[i])
+		}*/
+		zaLink := GetZabbixAgentLink(URLs)
+		fmt.Println("zaLink:", zaLink)
 
+		// 下载安装包,保存在agentDir
+		packageName = fetchPackage(zaLink, AgentDir)
+		logger("INFO", fmt.Sprintf("package name: %s", packageName))
+
+	}
 	// 配置路径
-	packageAbsPath := filepath.Join(AgentDir, "zabbix-agentd-5.0.14-1.linux.x86_64.tar.gz")
+	packageAbsPath := filepath.Join(AgentDir, packageName)
 	zabbixDirAbsPath := filepath.Join(AgentDir, "zabbix_agentd")
 	zabbixScriptAbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
 	zabbixConfAbsPath := filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
 
-	if IsFileExist(packageAbsPath) {
-		// 解压安装包,解压到当前文件夹
-		logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
-		err := utils.Untar(packageAbsPath, AgentDir)
-		if err != nil {
-			logger("", "ungzip failed "+err.Error())
-			return
-		}
-		logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
-	} else {
-		// 下载安装包
-		fetchPackage(zaLink, packageAbsPath)
+	// 解压安装包,解压到当前文件夹
+	logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
+	err = utils.Untar(packageAbsPath, AgentDir)
+	if err != nil {
+		logger("", "ungzip failed "+err.Error())
+		return
 	}
+	logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
 
 	// 写入配置
 	confArgsMap := make(map[string]string, 3)
@@ -472,7 +526,7 @@ func main() {
 	confArgsMap["%change_serverip%"] = ServerIP
 	confArgsMap["%change_hostname%"] = AgentIP
 	logger("INFO", "starting to modify zabbix agent conf")
-	err := ReplaceWords(zabbixConfAbsPath, confArgsMap)
+	err = ReplaceWords(zabbixConfAbsPath, confArgsMap)
 	if err != nil {
 		logger("ERROR", err.Error())
 	}
@@ -492,6 +546,12 @@ func main() {
 	startAgent(zabbixScriptAbsPath)
 
 	// 检查进程
-	checkAgentProcess()
+	//checkAgentProcess()
+	p := GetProcess()
+	for pid, name := range p {
+		if strings.Contains(name, "zabbix_agentd") {
+			fmt.Printf("pid:%d, name:%s\n", pid, name)
+		}
+	}
 	logger("INFO", "zabbix agent installer is running done.")
 }
