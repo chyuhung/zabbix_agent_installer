@@ -1,4 +1,4 @@
-package myos
+package utils
 
 // source:https://gist.github.com/flxxyz/ae3ef071dc4ffb0c55daedc7f0740611
 // golang 获取系统版本号(windows, linux)

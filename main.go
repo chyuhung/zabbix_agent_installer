@@ -8,12 +8,6 @@ import (
 	"runtime"
 	"strings"
 
-	"zabbix_agent_installer/mylog"
-	"zabbix_agent_installer/mynet"
-	"zabbix_agent_installer/myos"
-	"zabbix_agent_installer/mystring"
-	"zabbix_agent_installer/myuser"
-	"zabbix_agent_installer/script"
 	"zabbix_agent_installer/utils"
 )
 
@@ -26,70 +20,68 @@ var (
 	AgentIP     string
 )
 
-// 组装配置必要参数
+// Read the parameters from stdin
 func ScanParams() (server string, port string, user string, dir string, agent string) {
-	// 接受命令
+	// Receive the command
 	flag.StringVar(&server, "s", "", "zabbix server ip.")
 	flag.StringVar(&port, "p", "8001", "zabbix server port.")
 	flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
 	flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
 	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
-	// 转换
 	flag.Parse()
-	// serverIP,必要参数
-	if mystring.IsEmptyString(server) {
-		mylog.Logger("ERROR", "must input zabbix server ip")
+	// serverIP,Required parameters
+	if IsEmptyString(server) {
+		Logger("ERROR", "must input zabbix server ip")
 		os.Exit(1)
-	} else if !mynet.IsIPv4(server) {
-		mylog.Logger("ERROR", "invalid server ip")
+	} else if !IsIPv4(server) {
+		Logger("ERROR", "invalid server ip")
 		os.Exit(1)
 	}
 
 	// agentUser
-	// 如果用户不指定用户，则默认使用cloud用户，如果cloud不存在，则panic，cloud存在则检查当前是否为cloud,是则安装，不是则panic
-	// 如果用户指定了用户，则检查用户是否存在，检查当前是否为指定用户，存在且是当前用户则安装，否则panic
-	currUser, err := myuser.GetCurrentUser()
+	// If you do not specify a user, you use the cloud user by default, if the cloud does not exist, then panic, cloud exists to check whether it is currently cloud, yes is installed, not panic;
+	// If a user is specified, check if the user exists, check whether the user is currently the specified user, exists and is the current user is installed, otherwise panic
+	currentUser, err := GetCurrentUser()
 	if err != nil {
-		mylog.Logger("ERROR", "get current user failed "+err.Error())
+		Logger("ERROR", "get current user failed "+err.Error())
 		os.Exit(1)
 	}
-	if currUser != user {
-		if currUser == DefaultUser {
-			mylog.Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
+	if currentUser != user {
+		if currentUser == DefaultUser {
+			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
 		} else {
-			mylog.Logger("ERROR", fmt.Sprintf("switch to the user %s then install", user))
+			Logger("ERROR", fmt.Sprintf("switch to the user %s then install", user))
 			os.Exit(1)
 		}
 	}
 	// agentDir
-	if mystring.IsEmptyString(dir) {
-		dir, err = myuser.GetUserHomePath()
+	if IsEmptyString(dir) {
+		dir, err = GetUserHomePath()
 		if err != nil {
-			mylog.Logger("ERROR", "get current user home dir failed "+err.Error())
+			Logger("ERROR", "get current user home dir failed "+err.Error())
 			os.Exit(1)
 		}
 	} else {
-		// 格式化成标准写法
 		dir = filepath.Join(dir)
 	}
 
 	// agentIP
-	if mystring.IsEmptyString(agent) {
-		agent, err = mynet.GetMainIP()
+	if IsEmptyString(agent) {
+		agent, err = GetMainIP()
 		if err != nil {
-			mylog.Logger("ERROR", "get agent ip failed "+err.Error())
+			Logger("ERROR", "get agent ip failed "+err.Error())
 			os.Exit(1)
 		}
-	} else if !mynet.IsIPv4(agent) {
-		mylog.Logger("ERROR", "invalid agent ip")
+	} else if !IsIPv4(agent) {
+		Logger("ERROR", "invalid agent ip")
 		os.Exit(1)
 	}
 	// serverPort
-	if mynet.IsUnreachable(server, port) {
-		mylog.Logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
+	if IsUnreachable(server, port) {
+		Logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
 	} else {
-		mylog.Logger("INFO", fmt.Sprintf("connect to %s:%s successful", server, port))
+		Logger("INFO", fmt.Sprintf("connect to %s:%s successful", server, port))
 	}
 
 	return server, port, user, dir, agent
@@ -98,53 +90,53 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 // GetZabbixAgentLink returns the zabbix agent link
 func GetZabbixAgentLink(links []string) string {
 	var zaLinks []string
-	// 筛选包含关键词zabbix-agent 的链接
+	// Filter links that contain the keyword zabbix-agent or zabbix_agent
 	for i := range links {
-		if mystring.IsContainsOr(links[i], []string{"zabbix-agent", "zabbix_agent"}) {
+		if IsContainsOr(links[i], []string{"zabbix-agent", "zabbix_agent"}) {
 			zaLinks = append(zaLinks, links[i])
 		}
 	}
-	// 系统类型
+	// OS type,windows or linux
 	ot := runtime.GOOS
-	// 架构类型
+	// System architecture
 	oa := runtime.GOARCH
 	var avaLinks []string
 
 	switch ot {
 	case "windows":
 		for i := range zaLinks {
-			if mystring.IsContainsOr(links[i], []string{"amd64"}) && mystring.IsContainsAnd(zaLinks[i], []string{"win"}) {
+			if IsContainsOr(links[i], []string{"amd64"}) && IsContainsAnd(zaLinks[i], []string{"win"}) {
 				avaLinks = append(avaLinks, zaLinks[i])
 			} else {
-				mylog.Logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
+				Logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
 			}
 		}
 	case "linux":
 		for i := range zaLinks {
 			if oa == "amd64" {
-				if mystring.IsContainsOr(zaLinks[i], []string{"amd64", "x86_64"}) && mystring.IsContainsAnd(zaLinks[i], []string{"linux"}) {
+				if IsContainsOr(zaLinks[i], []string{"amd64", "x86_64"}) && IsContainsAnd(zaLinks[i], []string{"linux"}) {
 					avaLinks = append(avaLinks, zaLinks[i])
 				}
 			} else if oa == "386" {
-				if mystring.IsContainsOr(zaLinks[i], []string{"386"}) && mystring.IsContainsAnd(zaLinks[i], []string{"linux"}) {
+				if IsContainsOr(zaLinks[i], []string{"386"}) && IsContainsAnd(zaLinks[i], []string{"linux"}) {
 					avaLinks = append(avaLinks, zaLinks[i])
 				}
 			} else {
-				mylog.Logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
+				Logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
 			}
 		}
 	default:
-		mylog.Logger("ERROR", fmt.Sprintf("unknown OS type:%s", ot))
+		Logger("ERROR", fmt.Sprintf("unknown OS type:%s", ot))
 	}
-	mylog.Logger("INFO", "get links done")
+	Logger("INFO", "get links done")
 	return avaLinks[len(avaLinks)-1]
 }
 
-// 筛选zabbix安装包名称
+// Filter zabbix installation package names
 func GetZabbixAgentPackageName(filenames []string) (string, error) {
 	var avaFilenames []string
 	for _, filename := range filenames {
-		if mystring.IsContainsAnd(filename, []string{"zabbix", "agent"}) && mystring.IsContainsOr(filename, []string{".tar.gz", ".zip"}) {
+		if IsContainsAnd(filename, []string{"zabbix", "agent"}) && IsContainsOr(filename, []string{".tar.gz", ".zip"}) {
 			switch runtime.GOOS {
 			case "linux":
 				if strings.Contains(filename, "linux") {
@@ -155,7 +147,7 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 					avaFilenames = append(avaFilenames, filename)
 				}
 			default:
-				mylog.Logger("ERROR", fmt.Sprintf("unknown os type: %s", runtime.GOOS))
+				Logger("ERROR", fmt.Sprintf("unknown os type: %s", runtime.GOOS))
 			}
 		}
 	}
@@ -170,100 +162,99 @@ func main() {
 	WinURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	url := "http://10.191.101.254/zabbix-agent/"
 
-	// 获取关键参数
+	// Gets the key parameters
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := ScanParams()
-	// 输出配置信息
-	mylog.Logger("INFO", fmt.Sprintf("ServerIP:%s", ServerIP))
-	mylog.Logger("INFO", fmt.Sprintf("ServerPort:%s", ServerPort))
-	mylog.Logger("INFO", fmt.Sprintf("AgentUser:%s", AgentUser))
-	mylog.Logger("INFO", fmt.Sprintf("AgentDir:%s", AgentDir))
-	mylog.Logger("INFO", fmt.Sprintf("AgentIP:%s", AgentIP))
-	// 检查安装包
-	filenames, err := myos.GetFileNames(AgentDir)
+	// Output configuration information
+	Logger("INFO", fmt.Sprintf("ServerIP:%s", ServerIP))
+	Logger("INFO", fmt.Sprintf("ServerPort:%s", ServerPort))
+	Logger("INFO", fmt.Sprintf("AgentUser:%s", AgentUser))
+	Logger("INFO", fmt.Sprintf("AgentDir:%s", AgentDir))
+	Logger("INFO", fmt.Sprintf("AgentIP:%s", AgentIP))
+	// Check the package
+	filenames, err := GetFileNames(AgentDir)
 	if err != nil {
-		mylog.Logger("", err.Error())
+		Logger("", err.Error())
 		os.Exit(1)
 	}
 	packageName, err := GetZabbixAgentPackageName(filenames)
 	if err != nil {
-		mylog.Logger("", err.Error())
-		// 目录下无可用安装包
-		mylog.Logger("INFO", "no package found,starting to download...")
-		mylog.Logger("INFO", fmt.Sprintf("os type: %s", runtime.GOOS))
+		Logger("", err.Error())
+		// There are no installation packages available in the directory
+		Logger("INFO", "no package found,starting to download...")
+		Logger("INFO", fmt.Sprintf("os type: %s", runtime.GOOS))
 		switch runtime.GOOS {
 		case "linux":
-			mylog.Logger("INFO", "linux is supported")
+			Logger("INFO", "linux is supported")
 			url = LinuxURL
 		case "windows":
-			mylog.Logger("INFO", "windows is supported")
+			Logger("INFO", "windows is supported")
 			url = WinURL
 		default:
-			mylog.Logger("ERROR", "unknown platform")
+			Logger("ERROR", "unknown platform")
 			os.Exit(1)
 		}
 		url = "http://10.191.101.254/zabbix-agent/"
-		// 获取链接
-		mylog.Logger("INFO", fmt.Sprintf("url: %s", url))
-		URLs, err := mynet.GetLinks(url)
+		// Get the links
+		Logger("INFO", fmt.Sprintf("url: %s", url))
+		URLs, err := GetLinks(url)
 		if err != nil {
-			mylog.Logger("", err.Error())
+			Logger("", err.Error())
 			os.Exit(1)
 		}
 		zaLink := GetZabbixAgentLink(URLs)
 		fmt.Println("zaLink:", zaLink)
 
-		// 下载安装包,保存在agentDir
-		packageName = mynet.DownloadPackage(zaLink, AgentDir)
-		mylog.Logger("INFO", fmt.Sprintf("package name: %s", packageName))
+		// Download the installation package and save it in agentDir
+		packageName = DownloadPackage(zaLink, AgentDir)
+		Logger("INFO", fmt.Sprintf("package name: %s", packageName))
 
 	}
-	// 配置路径
+	// Configure the path
 	packageAbsPath := filepath.Join(AgentDir, packageName)
 	zabbixDirAbsPath := filepath.Join(AgentDir, "zabbix_agentd")
-	zabbixScriptAbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
+	zabbixbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_sh")
 	zabbixConfAbsPath := filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
 
-	// 解压安装包,解压到当前文件夹
-	mylog.Logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
+	// Unzip the installation package and extract it to the current folder
+	Logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
 	err = utils.Untar(packageAbsPath, AgentDir)
 	if err != nil {
-		mylog.Logger("", "ungzip failed "+err.Error())
+		Logger("", "ungzip failed "+err.Error())
 		return
 	}
-	mylog.Logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
+	Logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
 
-	// 写入配置
+	// Write configuration
 	confArgsMap := make(map[string]string, 3)
 	confArgsMap["%change_basepath%"] = zabbixDirAbsPath
 	confArgsMap["%change_serverip%"] = ServerIP
 	confArgsMap["%change_hostname%"] = AgentIP
-	mylog.Logger("INFO", "starting to modify zabbix agent conf")
-	err = mystring.ReplaceString(zabbixConfAbsPath, confArgsMap)
+	Logger("INFO", "starting to modify zabbix agent conf")
+	err = ReplaceString(zabbixConfAbsPath, confArgsMap)
 	if err != nil {
-		mylog.Logger("ERROR", err.Error())
+		Logger("ERROR", err.Error())
 	}
-	mylog.Logger("INFO", "modify zabbix agent conf successful")
+	Logger("INFO", "modify zabbix agent conf successful")
 
-	// 修改启动脚本
-	scriptArgsMap := make(map[string]string, 1)
-	scriptArgsMap["%change_basepath%"] = zabbixDirAbsPath
-	mylog.Logger("INFO", "starting to modify zabbix agent script")
-	err = mystring.ReplaceString(zabbixScriptAbsPath, scriptArgsMap)
+	// Modify the startup script
+	rgsMap := make(map[string]string, 1)
+	rgsMap["%change_basepath%"] = zabbixDirAbsPath
+	Logger("INFO", "starting to modify zabbix agent")
+	err = ReplaceString(zabbixbsPath, rgsMap)
 	if err != nil {
-		mylog.Logger("ERROR", err.Error())
+		Logger("ERROR", err.Error())
 	}
-	mylog.Logger("INFO", "modify zabbix agent script successful")
+	Logger("INFO", "modify zabbix agent successful")
 
-	// 启动zabbix
-	script.StartAgent(zabbixScriptAbsPath)
+	// Start zabbix
+	StartAgent(zabbixbsPath)
 
-	// 检查进程
-	//checkAgentProcess()
-	p := myos.GetProcess()
+	// Check the process
+	p := GetProcess()
 	for pid, name := range p {
 		if strings.Contains(name, "zabbix_agentd") {
 			fmt.Printf("pid:%d, name:%s\n", pid, name)
 		}
 	}
-	mylog.Logger("INFO", "zabbix agent installer is running done.")
+	Logger("INFO", "zabbix agent installer is running done.")
 }

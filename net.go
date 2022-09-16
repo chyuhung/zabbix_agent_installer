@@ -1,6 +1,7 @@
-package mynet
+package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,12 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"zabbix_agent_installer/mylog"
 
 	"golang.org/x/net/html"
 )
 
-// 判断ip是否合规
+// Determine whether the IP is compliant
 func IsIPv4(ipv4 string) bool {
 	ip := net.ParseIP(ipv4)
 	if ip == nil {
@@ -25,7 +25,7 @@ func IsIPv4(ipv4 string) bool {
 	return ip != nil
 }
 
-// 测试ip是否可达
+// Test if the IP is reachable
 func IsUnreachable(ipv4 string, port string) bool {
 	addr := net.JoinHostPort(ipv4, port)
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
@@ -44,10 +44,12 @@ func GetMainIP() (string, error) {
 	}
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	if localAddr.String() == "" {
+		return "", errors.New("no local address")
+	}
 	return strings.Split(localAddr.String(), ":")[0], nil
 }
 
-// source:http://www.codebaoku.com/it-go/it-go-168428.html
 func visit(links []string, n *html.Node) []string {
 	if n.Type == html.ElementNode && n.Data == "a" {
 		for _, a := range n.Attr {
@@ -77,41 +79,40 @@ func GetLinks(url string) ([]string, error) {
 	return links, nil
 }
 
-// 下载安装包
 func DownloadPackage(url string, saveAbsPath string) string {
 	resp, err := http.Get(url)
 	if err != nil {
-		mylog.Logger("ERROR", "download package failed "+err.Error())
-		os.Exit(1)
+		fmt.Println(err.Error())
+		return ""
 	}
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			mylog.Logger("ERROR", err.Error())
-			os.Exit(1)
+			Logger("ERROR", err.Error())
+			return
 		}
 	}()
-	// 创建文件，从url中读取文件名
+	// Create a file and get the filename from the url
 	filename := path.Base(url)
-	mylog.Logger("INFO", fmt.Sprintf("starting to download %s", filename))
+	Logger("INFO", fmt.Sprintf("starting to download %s", filename))
 	out, err := os.OpenFile(filepath.Join(saveAbsPath, filename), os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
-		mylog.Logger("ERROR", "download package failed "+err.Error())
-		os.Exit(1)
+		Logger("ERROR", "download package failed "+err.Error())
+		return ""
 	}
 	defer func() {
 		err := out.Close()
 		if err != nil {
-			mylog.Logger("ERROR", err.Error())
-			os.Exit(1)
+			Logger("ERROR", err.Error())
+			return
 		}
 	}()
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		mylog.Logger("ERROR", "download package failed "+err.Error())
-		os.Exit(1)
+		Logger("ERROR", "download package failed "+err.Error())
+		return ""
 	}
-	mylog.Logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
-	mylog.Logger("INFO", "Download successful")
+	Logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
+	Logger("INFO", "Download successful")
 	return filename
 }

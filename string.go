@@ -1,4 +1,4 @@
-package mystring
+package main
 
 import (
 	"bufio"
@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// 是否有值
 func IsEmptyString(v interface{}) bool {
 	if f, ok := v.(string); ok {
 		if f == "" {
@@ -58,16 +57,16 @@ func ReplaceString(filePath string, args map[string]string) error {
 			return err
 		}
 	}
-	// 写入文件
+	// Write to a file
 	err = bw.Flush()
 	if err != nil {
 		return err
 	}
-	// 移除旧文件
+	// Remove the old file
 	err = os.Remove(filePath)
 	if err != nil {
 		return err
-	} else { // 重命名新文件
+	} else { // Rename the file
 		err = os.Rename(tempFileAbsPath, filePath)
 		if err != nil {
 			return err

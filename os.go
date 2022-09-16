@@ -1,4 +1,4 @@
-package myos
+package main
 
 import (
 	"io/ioutil"
@@ -7,7 +7,7 @@ import (
 	"github.com/shirou/gopsutil/process"
 )
 
-// 获取路径下文件名称,忽略文件夹
+// Gets the filename under path, ignoring the folder
 func GetFileNames(absPath string) ([]string, error) {
 	var myFiles []string
 	files, err := ioutil.ReadDir(absPath)

@@ -1,8 +1,8 @@
-package mylog
+package main
 
 import "fmt"
 
-// 日志打印
+// Log printing
 func Logger(level string, log string) {
 	if level == "" {
 		level = "SYSTEM"

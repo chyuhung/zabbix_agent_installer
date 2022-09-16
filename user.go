@@ -1,8 +1,8 @@
-package myuser
+package main
 
 import "os/user"
 
-// 获取当前用户用户名
+// Get the current user's name
 func GetCurrentUser() (string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
@@ -11,7 +11,7 @@ func GetCurrentUser() (string, error) {
 	return currentUser.Username, nil
 }
 
-// 获取当前用户家目录
+// Get the current user's home directory path
 func GetUserHomePath() (string, error) {
 	currentUser, err := user.Current()
 	if err != nil {
