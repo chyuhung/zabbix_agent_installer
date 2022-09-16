@@ -205,7 +205,11 @@ func main() {
 		fmt.Println("zaLink:", zaLink)
 
 		// Download the installation package and save it in agentDir
-		packageName = DownloadPackage(zaLink, AgentDir)
+		packageName, err = DownloadPackage(zaLink, AgentDir)
+		if err != nil {
+			Logger("", err.Error())
+			os.Exit(1)
+		}
 		Logger("INFO", fmt.Sprintf("package name: %s", packageName))
 
 	}

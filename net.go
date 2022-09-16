@@ -79,17 +79,15 @@ func GetLinks(url string) ([]string, error) {
 	return links, nil
 }
 
-func DownloadPackage(url string, saveAbsPath string) string {
+func DownloadPackage(url string, saveAbsPath string) (string, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println(err.Error())
-		return ""
+		return "", err
 	}
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			Logger("ERROR", err.Error())
-			return
+			fmt.Print(err.Error())
 		}
 	}()
 	// Create a file and get the filename from the url
@@ -98,21 +96,17 @@ func DownloadPackage(url string, saveAbsPath string) string {
 	out, err := os.OpenFile(filepath.Join(saveAbsPath, filename), os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		Logger("ERROR", "download package failed "+err.Error())
-		return ""
+		return "", err
 	}
 	defer func() {
 		err := out.Close()
 		if err != nil {
-			Logger("ERROR", err.Error())
-			return
+			fmt.Print(err.Error())
 		}
 	}()
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		Logger("ERROR", "download package failed "+err.Error())
-		return ""
+		fmt.Print(err.Error())
 	}
-	Logger("INFO", fmt.Sprintf("%s was saved to %s", filename, saveAbsPath))
-	Logger("INFO", "Download successful")
-	return filename
+	return filename, nil
 }
