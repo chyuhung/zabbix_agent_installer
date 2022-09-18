@@ -92,10 +92,8 @@ func DownloadPackage(url string, saveAbsPath string) (string, error) {
 	}()
 	// Create a file and get the filename from the url
 	filename := path.Base(url)
-	Logger("INFO", fmt.Sprintf("starting to download %s", filename))
 	out, err := os.OpenFile(filepath.Join(saveAbsPath, filename), os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
-		Logger("ERROR", "download package failed "+err.Error())
 		return "", err
 	}
 	defer func() {

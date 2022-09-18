@@ -31,7 +31,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	flag.Parse()
 	// serverIP,Required parameters
 	if IsEmptyString(server) {
-		Logger("ERROR", "must input zabbix server ip")
+		Logger("ERROR", "must input the zabbix server ip")
 		os.Exit(1)
 	} else if !IsIPv4(server) {
 		Logger("ERROR", "invalid server ip")
@@ -82,7 +82,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	if IsUnreachable(server, port) {
 		Logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
 	} else {
-		Logger("INFO", fmt.Sprintf("connect to %s:%s successful", server, port))
+		Logger("INFO", fmt.Sprintf("connect to %s:%s successfully", server, port))
 	}
 
 	return server, port, user, dir, agent
@@ -129,7 +129,6 @@ func GetZabbixAgentLink(links []string) string {
 	default:
 		Logger("ERROR", fmt.Sprintf("unknown OS type:%s", ot))
 	}
-	Logger("INFO", "get links done")
 	return avaLinks[len(avaLinks)-1]
 }
 
@@ -177,13 +176,13 @@ func main() {
 		Logger("", err.Error())
 		os.Exit(1)
 	}
-	Logger("INFO", "get filenames successful")
+	Logger("INFO", "get filenames successfully")
+	Logger("INFO", "starting to get the zabbix agent package name")
 	packageName, err := GetZabbixAgentPackageName(filenames)
-	Logger("INFO", fmt.Sprintf("get package name is %s", packageName))
 	if err != nil {
-		Logger("", err.Error())
+		Logger("WARN", err.Error())
 		// There are no installation packages available in the directory
-		Logger("INFO", "no package found,starting to download...")
+		Logger("INFO", "starting to download...")
 		Logger("INFO", fmt.Sprintf("os type: %s", runtime.GOOS))
 		switch runtime.GOOS {
 		case "linux":
@@ -202,66 +201,68 @@ func main() {
 		Logger("INFO", fmt.Sprintf("url: %s", url))
 		URLs, err := GetLinks(url)
 		if err != nil {
-			Logger("", err.Error())
+			Logger("ERROR", err.Error())
 			os.Exit(1)
 		}
 		zaLink := GetZabbixAgentLink(URLs)
-		Logger("INFO", fmt.Sprintf("get zabbix package link: %s", zaLink))
+		Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", zaLink))
 
 		// Download the installation package and save it in agentDir
+		Logger("INFO", "Downloading the zabbix package ...")
 		packageName, err = DownloadPackage(zaLink, AgentDir)
 		if err != nil {
-			Logger("", err.Error())
+			Logger("ERROR", err.Error())
 			os.Exit(1)
 		}
-		Logger("INFO", fmt.Sprintf("package name: %s", packageName))
-
 	}
+	Logger("INFO", fmt.Sprintf("get the package name is %s", packageName))
 	// Configure the path
 	packageAbsPath := filepath.Join(AgentDir, packageName)
 	zabbixDirAbsPath := filepath.Join(AgentDir, "zabbix_agentd")
-	zabbixbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_sh")
+	zabbixAbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
 	zabbixConfAbsPath := filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
 
 	// Unzip the installation package and extract it to the current folder
 	Logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
 	err = utils.Untar(packageAbsPath, AgentDir)
 	if err != nil {
-		Logger("", "ungzip failed "+err.Error())
+		Logger("ERROR", "ungzip failed "+err.Error())
 		os.Exit(1)
 	}
-	Logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
+	Logger("INFO", fmt.Sprintf("untar %s successfully", packageAbsPath))
 
 	// Write configuration
 	confArgsMap := make(map[string]string, 3)
 	confArgsMap["%change_basepath%"] = zabbixDirAbsPath
 	confArgsMap["%change_serverip%"] = ServerIP
 	confArgsMap["%change_hostname%"] = AgentIP
-	Logger("INFO", "starting to modify zabbix agent conf")
+	Logger("INFO", "starting to modify the zabbix agent conf")
 	err = ReplaceString(zabbixConfAbsPath, confArgsMap)
 	if err != nil {
 		Logger("", err.Error())
 		os.Exit(1)
 	}
-	Logger("INFO", "modify zabbix agent conf successful")
+	Logger("INFO", "modify the zabbix agent conf successfully")
 
 	// Modify the startup script
 	rgsMap := make(map[string]string, 1)
 	rgsMap["%change_basepath%"] = zabbixDirAbsPath
-	Logger("INFO", "starting to modify zabbix agent")
-	err = ReplaceString(zabbixbsPath, rgsMap)
+	Logger("INFO", "starting to modify the zabbix agent script")
+	err = ReplaceString(zabbixAbsPath, rgsMap)
 	if err != nil {
 		Logger("ERROR", err.Error())
-	}
-	Logger("INFO", "modify zabbix agent successful")
-
-	// Start zabbix
-	err = StartAgent(zabbixbsPath)
-	if err != nil {
-		Logger("", err.Error())
 		os.Exit(1)
 	}
-	Logger("INFO", "starting zabbix agent successful")
+	Logger("INFO", "modify the zabbix agent script successfully")
+
+	// Start zabbix
+	Logger("INFO", "starting to start the zabbix agent")
+	err = StartAgent(zabbixAbsPath)
+	if err != nil {
+		Logger("ERROR", err.Error())
+		os.Exit(1)
+	}
+	Logger("INFO", "starting the zabbix agent successfully")
 
 	// Check the process
 	p := GetProcess()
@@ -270,5 +271,5 @@ func main() {
 			fmt.Printf("pid:%d, name:%s\n", pid, name)
 		}
 	}
-	Logger("INFO", "zabbix agent installer is running done.")
+	Logger("INFO", "the zabbix agent installer is running done.")
 }

@@ -48,7 +48,7 @@ func ReplaceString(filePath string, args map[string]string) error {
 		} else if err != nil {
 			return err
 		}
-		for k, v := range args { //逐个替换kv
+		for k, v := range args { // Replace each k with v
 			newline = strings.ReplaceAll(line, k, v)
 			line = newline
 		}
