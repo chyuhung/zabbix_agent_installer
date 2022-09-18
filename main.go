@@ -64,6 +64,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		}
 	} else {
 		dir = filepath.Join(dir)
+		Logger("INFO", fmt.Sprintf("get current user home dir is %s", dir))
 	}
 
 	// agentIP
@@ -176,7 +177,9 @@ func main() {
 		Logger("", err.Error())
 		os.Exit(1)
 	}
+	Logger("INFO", "get filenames successful")
 	packageName, err := GetZabbixAgentPackageName(filenames)
+	Logger("INFO", fmt.Sprintf("get package name is %s", packageName))
 	if err != nil {
 		Logger("", err.Error())
 		// There are no installation packages available in the directory
@@ -193,6 +196,7 @@ func main() {
 			Logger("ERROR", "unknown platform")
 			os.Exit(1)
 		}
+		// Test url
 		url = "http://10.191.101.254/zabbix-agent/"
 		// Get the links
 		Logger("INFO", fmt.Sprintf("url: %s", url))
@@ -202,7 +206,7 @@ func main() {
 			os.Exit(1)
 		}
 		zaLink := GetZabbixAgentLink(URLs)
-		fmt.Println("zaLink:", zaLink)
+		Logger("INFO", fmt.Sprintf("get zabbix package link: %s", zaLink))
 
 		// Download the installation package and save it in agentDir
 		packageName, err = DownloadPackage(zaLink, AgentDir)
@@ -224,7 +228,7 @@ func main() {
 	err = utils.Untar(packageAbsPath, AgentDir)
 	if err != nil {
 		Logger("", "ungzip failed "+err.Error())
-		return
+		os.Exit(1)
 	}
 	Logger("INFO", fmt.Sprintf("untar %s successful", packageAbsPath))
 
@@ -236,7 +240,8 @@ func main() {
 	Logger("INFO", "starting to modify zabbix agent conf")
 	err = ReplaceString(zabbixConfAbsPath, confArgsMap)
 	if err != nil {
-		Logger("ERROR", err.Error())
+		Logger("", err.Error())
+		os.Exit(1)
 	}
 	Logger("INFO", "modify zabbix agent conf successful")
 
@@ -251,7 +256,12 @@ func main() {
 	Logger("INFO", "modify zabbix agent successful")
 
 	// Start zabbix
-	StartAgent(zabbixbsPath)
+	err = StartAgent(zabbixbsPath)
+	if err != nil {
+		Logger("", err.Error())
+		os.Exit(1)
+	}
+	Logger("INFO", "starting zabbix agent successful")
 
 	// Check the process
 	p := GetProcess()
