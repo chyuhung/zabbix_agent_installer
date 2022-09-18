@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
 	"flag"
 	"fmt"
+	"math/big"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -157,7 +160,81 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 	return avaFilenames[len(avaFilenames)-1], nil
 }
 
+// Edit the crontab file
+func NewCrontabFile(crontabAbsPath string, cron string) error {
+	crontabAbsPath = filepath.Join(crontabAbsPath, "")
+	f, err := os.OpenFile(crontabAbsPath, os.O_CREATE|(os.O_RDWR|os.O_TRUNC), 0644)
+	defer func() {
+		err = f.Close()
+		if err != nil {
+			fmt.Print(err.Error())
+			return
+		}
+	}()
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(cron)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Generate a crontab expression
+func GetCrontabExpression(time string, exec string, expression string) (string, error) {
+	cron := time + " " + exec + " " + expression + "\n"
+	if time != "" && exec != "" && expression != "" {
+		return cron, nil
+	} else {
+		return "", fmt.Errorf("invalid crontab format:%s", cron)
+	}
+}
+
+// Generate rand string
+func RandStringBytes(n int) string {
+	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	size := len(letterBytes)
+	for i := range b {
+		w, _ := rand.Int(rand.Reader, big.NewInt(int64(size)))
+		b[i] = letterBytes[w.Int64()]
+	}
+	return string(b)
+}
+
+// Generate a crontab path
+func GetCrontabFileAbsPath() string {
+	rand := RandStringBytes(6)
+	return filepath.Join("/tmp/", "crontab."+rand)
+}
+
 func main() {
+	// 获取用户原有定时任务
+	cmd := exec.Command("crontab", "-u", "test", "-l")
+	//cmd := exec.Command("crontab", "-l")
+	output, err := cmd.Output()
+	if err != nil {
+		//Logger("ERROR", err.Error())
+		Logger("INFO", "no crontab found")
+	} else {
+		fmt.Println(string(output))
+	}
+
+	// 新增zabbix_agentd 定时任务
+	cron, err := GetCrontabExpression("*/10 * * * *", "/bin/sh", "/home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null")
+	Logger("INFO", fmt.Sprintf("crontab: %s", cron))
+	if err != nil {
+		Logger("ERROR", err.Error())
+		os.Exit(1)
+	}
+	crontaFileAbsbPath := GetCrontabFileAbsPath()
+	err = NewCrontabFile(crontaFileAbsbPath, cron)
+	if err != nil {
+		Logger("ERROR", err.Error())
+		os.Exit(1)
+	}
+	return
 	LinuxURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	WinURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	url := "http://10.191.101.254/zabbix-agent/"
