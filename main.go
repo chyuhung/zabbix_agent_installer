@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-
 	"zabbix_agent_installer/utils"
 )
 
@@ -184,16 +183,6 @@ func NewCronFile(cron string) (string, error) {
 	return cronAbsPath, nil
 }
 
-// Generate a crontab expression
-func GetCrontabExpression(time string, exec string, expression string) (string, error) {
-	cron := time + " " + exec + " " + expression + "\n"
-	if time != "" && exec != "" && expression != "" {
-		return cron, nil
-	} else {
-		return "", fmt.Errorf("invalid crontab format:%s", cron)
-	}
-}
-
 // Generate rand string
 func RandStringBytes(n int) string {
 	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -212,16 +201,10 @@ func NewCronTempFile() (absPath string) {
 	return filepath.Join("/tmp/", "crontab."+rand)
 }
 
-func WriteCrontab(cron string, user string) error {
+func WriteCrontab(cron string) error {
 	// Get the source cron
 	cmd := exec.Command("crontab", "-l")
-	if user != "" {
-		cmd = exec.Command("crontab", "-u", user, "-l")
-	}
-	output, err := cmd.Output()
-	if !strings.Contains(string(output), "no crontab for") && err != nil {
-		return err
-	}
+	output, _ := cmd.Output()
 	// Write the output to the temp file
 	srcCronFileAbsPath, err := NewCronFile(string(output))
 	if err != nil {
@@ -236,9 +219,6 @@ func WriteCrontab(cron string, user string) error {
 			return
 		}
 	}()
-	if err != nil {
-		return err
-	}
 	b := bufio.NewReader(f)
 	isContais := 0
 	for {
@@ -270,9 +250,6 @@ func WriteCrontab(cron string, user string) error {
 	}
 	// Rewrite the crontab
 	cmd = exec.Command("crontab", dstCronFileAbsPath)
-	if user != "" {
-		cmd = exec.Command("crontab", "-u", user, dstCronFileAbsPath)
-	}
 	result, err := cmd.Output()
 	if err != nil {
 		return err
@@ -283,7 +260,6 @@ func WriteCrontab(cron string, user string) error {
 	return nil
 }
 func main() {
-
 	LinuxURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	WinURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	url := "http://10.191.101.254/zabbix-agent/"
@@ -399,11 +375,8 @@ func main() {
 	}
 	// Write the cron
 	Logger("INFO", "starting write cron")
-	cron, err := GetCrontabExpression("*/10 * * * *", "/bin/sh", "/home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null")
-	if err != nil {
-		Logger("ERROR", err.Error())
-	}
-	err = WriteCrontab(cron, "")
+	cron := "*/10 * * * * /bin/sh /home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null\n"
+	err = WriteCrontab(cron)
 	if err != nil {
 		Logger("ERROR", err.Error())
 	}
