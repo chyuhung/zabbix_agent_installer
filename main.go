@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"flag"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -161,9 +164,9 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 }
 
 // Edit the crontab file
-func NewCrontabFile(crontabAbsPath string, cron string) error {
-	crontabAbsPath = filepath.Join(crontabAbsPath, "")
-	f, err := os.OpenFile(crontabAbsPath, os.O_CREATE|(os.O_RDWR|os.O_TRUNC), 0644)
+func NewCronFile(cron string) (string, error) {
+	cronAbsPath := filepath.Join(NewCronTempFile(), "")
+	f, err := os.OpenFile(cronAbsPath, os.O_CREATE|(os.O_RDWR|os.O_TRUNC), 0644)
 	defer func() {
 		err = f.Close()
 		if err != nil {
@@ -172,13 +175,13 @@ func NewCrontabFile(crontabAbsPath string, cron string) error {
 		}
 	}()
 	if err != nil {
-		return err
+		return "", err
 	}
 	_, err = f.WriteString(cron)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return cronAbsPath, nil
 }
 
 // Generate a crontab expression
@@ -204,37 +207,83 @@ func RandStringBytes(n int) string {
 }
 
 // Generate a crontab path
-func GetCrontabFileAbsPath() string {
+func NewCronTempFile() (absPath string) {
 	rand := RandStringBytes(6)
 	return filepath.Join("/tmp/", "crontab."+rand)
 }
 
-func main() {
-	// 获取用户原有定时任务
-	cmd := exec.Command("crontab", "-u", "test", "-l")
-	//cmd := exec.Command("crontab", "-l")
+func WriteCrontab(cron string, user string) error {
+	// Get the source cron
+	cmd := exec.Command("crontab", "-l")
+	if user != "" {
+		cmd = exec.Command("crontab", "-u", user, "-l")
+	}
 	output, err := cmd.Output()
-	if err != nil {
-		//Logger("ERROR", err.Error())
-		Logger("INFO", "no crontab found")
-	} else {
-		fmt.Println(string(output))
+	if !strings.Contains(string(output), "no crontab for") && err != nil {
+		return err
 	}
+	// Write the output to the temp file
+	srcCronFileAbsPath, err := NewCronFile(string(output))
+	if err != nil {
+		return err
+	}
+	// Open the temp file, check whether the cron exists
+	f, err := os.Open(srcCronFileAbsPath)
+	defer func() {
+		err = f.Close()
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+	}()
+	if err != nil {
+		return err
+	}
+	b := bufio.NewReader(f)
+	isContais := 0
+	for {
+		line, err := b.ReadString('\n')
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		// Check if the temp file contains the zabbix agent crontab
+		pattern := regexp.MustCompile(`^[^#].*zabbix_agentd`)
+		if pattern.MatchString(line) {
+			isContais = 1
+		}
+	}
+	// Delete the temp file
+	err = os.Remove(srcCronFileAbsPath)
+	if err != nil {
+		return err
+	}
+	// If the source cron file contains the cron
+	if isContais == 1 {
+		return nil
+	}
+	// New zabbix_agentd crontab
+	dstCronFileAbsPath, err := NewCronFile(string(output) + cron)
+	if err != nil {
+		return err
+	}
+	// Rewrite the crontab
+	cmd = exec.Command("crontab", dstCronFileAbsPath)
+	if user != "" {
+		cmd = exec.Command("crontab", "-u", user, dstCronFileAbsPath)
+	}
+	result, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(result))
+	// Remove the temp crontab file
+	os.Remove(dstCronFileAbsPath)
+	return nil
+}
+func main() {
 
-	// 新增zabbix_agentd 定时任务
-	cron, err := GetCrontabExpression("*/10 * * * *", "/bin/sh", "/home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null")
-	Logger("INFO", fmt.Sprintf("crontab: %s", cron))
-	if err != nil {
-		Logger("ERROR", err.Error())
-		os.Exit(1)
-	}
-	crontaFileAbsbPath := GetCrontabFileAbsPath()
-	err = NewCrontabFile(crontaFileAbsbPath, cron)
-	if err != nil {
-		Logger("ERROR", err.Error())
-		os.Exit(1)
-	}
-	return
 	LinuxURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	WinURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	url := "http://10.191.101.254/zabbix-agent/"
@@ -348,5 +397,16 @@ func main() {
 			fmt.Printf("pid:%d, name:%s\n", pid, name)
 		}
 	}
-	Logger("INFO", "the zabbix agent installer is running done.")
+	// Write the cron
+	Logger("INFO", "starting write cron")
+	cron, err := GetCrontabExpression("*/10 * * * *", "/bin/sh", "/home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null")
+	if err != nil {
+		Logger("ERROR", err.Error())
+	}
+	err = WriteCrontab(cron, "")
+	if err != nil {
+		Logger("ERROR", err.Error())
+	}
+	Logger("INFO", "write crontab successfully")
+	Logger("INFO", "the zabbix agent installer is running done")
 }
