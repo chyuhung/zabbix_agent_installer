@@ -39,7 +39,10 @@ func TestCheckProcess(t *testing.T) {
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	ShowAgentProcess()
+	err := ShowAgentProcess()
+	if err != nil {
+		return
+	}
 
 	t.Log("check ok")
 }
@@ -70,4 +73,20 @@ func TestWriteCrontab1(t *testing.T) {
 	if err != nil {
 		t.Logf(err.Error())
 	}
+}
+
+// Windows test
+func TestGetCurrentUser(t *testing.T) {
+	user, err := GetCurrentUser()
+	if err != nil {
+		t.Logf(err.Error())
+	}
+	t.Logf(user)
+}
+func TestGetUserHomePath(t *testing.T) {
+	userHomePath, err := GetUserHomePath()
+	if err != nil {
+		t.Logf(err.Error())
+	}
+	t.Logf(userHomePath)
 }

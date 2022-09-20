@@ -18,15 +18,13 @@ import (
 )
 
 var (
-	DefaultUser = "cloud"
-	ServerIP    string
-	ServerPort  string
-	AgentUser   string
-	AgentDir    string
-	AgentIP     string
+	DefaultUser     = "cloud"
+	agentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
+	OSType          = "linux"
+	OSArch          = "amd64"
 )
 
-// Read the parameters from stdin
+// ScanParams Read the parameters from stdin
 func ScanParams() (server string, port string, user string, dir string, agent string) {
 	// Receive the command
 	flag.StringVar(&server, "s", "", "zabbix server ip.")
@@ -53,7 +51,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		os.Exit(1)
 	}
 	if currentUser != user {
-		if currentUser == DefaultUser {
+		if strings.Contains(currentUser, DefaultUser) {
 			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
 		} else {
@@ -138,7 +136,7 @@ func GetZabbixAgentLink(links []string) string {
 	return avaLinks[len(avaLinks)-1]
 }
 
-// Filter zabbix installation package names
+// GetZabbixAgentPackageName Filter zabbix installation package names
 func GetZabbixAgentPackageName(filenames []string) (string, error) {
 	var avaFilenames []string
 	for _, filename := range filenames {
@@ -163,7 +161,7 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 	return avaFilenames[len(avaFilenames)-1], nil
 }
 
-// Edit the crontab file
+// NewCronFile Edit the crontab file
 func NewCronFile(cron string) (string, error) {
 	cronAbsPath := filepath.Join(NewCronTempFile(), "")
 	f, err := os.OpenFile(cronAbsPath, os.O_CREATE|(os.O_RDWR|os.O_TRUNC), 0644)
@@ -184,7 +182,7 @@ func NewCronFile(cron string) (string, error) {
 	return cronAbsPath, nil
 }
 
-// Generate rand string
+// RandStringBytes Generate rand string
 func RandStringBytes(n int) string {
 	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, n)
@@ -196,10 +194,10 @@ func RandStringBytes(n int) string {
 	return string(b)
 }
 
-// Generate a crontab path
+// NewCronTempFile Generate a crontab path
 func NewCronTempFile() (absPath string) {
-	rand := RandStringBytes(6)
-	return filepath.Join("/tmp/", "crontab."+rand)
+	randString := RandStringBytes(6)
+	return filepath.Join("/tmp/", "crontab."+randString)
 }
 
 func WriteCrontab(cron string) error {
@@ -238,16 +236,40 @@ func WriteCrontab(cron string) error {
 		return err
 	}
 	// Remove the temp crontab file
-	os.Remove(dstCronFileAbsPath)
+	err = os.Remove(dstCronFileAbsPath)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 func main() {
-	LinuxURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
-	WinURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
-	url := "http://10.191.101.254/zabbix-agent/"
+	// System type
+	OSType = runtime.GOOS
+	// Architecture Type
+	OSArch = runtime.GOARCH
+	if OSType == "" || OSArch == "" {
+		Logger("ERROR", "get OS info failed")
+		os.Exit(1)
+	}
+	switch OSType {
+	case "linux":
+	case "windows":
+		DefaultUser = "Administrator"
+		agentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
+	default:
+		Logger("ERROR", "OS type not supported")
+		os.Exit(1)
+	}
+	// Test URL
+	agentPackageURL = "http://10.191.101.254/zabbix-agent/"
+	// The link
+	Logger("INFO", fmt.Sprintf("url: %s", agentPackageURL))
 
 	// Gets the key parameters
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := ScanParams()
+	if OSType == "windows" {
+		AgentDir = "C:\\"
+	}
 	// Output configuration information
 	Logger("INFO", fmt.Sprintf("ServerIP:%s", ServerIP))
 	Logger("INFO", fmt.Sprintf("ServerPort:%s", ServerPort))
@@ -267,23 +289,8 @@ func main() {
 		Logger("WARN", err.Error())
 		// There are no installation packages available in the directory
 		Logger("INFO", "starting to download...")
-		Logger("INFO", fmt.Sprintf("os type: %s", runtime.GOOS))
-		switch runtime.GOOS {
-		case "linux":
-			Logger("INFO", "linux is supported")
-			url = LinuxURL
-		case "windows":
-			Logger("INFO", "windows is supported")
-			url = WinURL
-		default:
-			Logger("ERROR", "unknown platform")
-			os.Exit(1)
-		}
-		// Test url
-		url = "http://10.191.101.254/zabbix-agent/"
-		// Get the links
-		Logger("INFO", fmt.Sprintf("url: %s", url))
-		URLs, err := GetLinks(url)
+
+		URLs, err := GetLinks(agentPackageURL)
 		if err != nil {
 			Logger("ERROR", err.Error())
 			os.Exit(1)
