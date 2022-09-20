@@ -233,11 +233,10 @@ func WriteCrontab(cron string) error {
 	}
 	// Rewrite the crontab
 	cmd = exec.Command("crontab", dstCronFileAbsPath)
-	result, err := cmd.Output()
+	_, err = cmd.Output()
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(result))
 	// Remove the temp crontab file
 	os.Remove(dstCronFileAbsPath)
 	return nil
