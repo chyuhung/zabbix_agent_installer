@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"flag"
 	"fmt"
@@ -205,22 +206,9 @@ func WriteCrontab(cron string) error {
 	// Get the source cron
 	cmd := exec.Command("crontab", "-l")
 	output, _ := cmd.Output()
-	// Write the output to the temp file
-	srcCronFileAbsPath, err := NewCronFile(string(output))
-	if err != nil {
-		return err
-	}
-	// Open the temp file, check whether the cron exists
-	f, err := os.Open(srcCronFileAbsPath)
-	defer func() {
-		err = f.Close()
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-	}()
+	f := bytes.NewReader(output)
 	b := bufio.NewReader(f)
-	isContais := 0
+	isCronExists := 0
 	for {
 		line, err := b.ReadString('\n')
 		if err == io.EOF {
@@ -231,17 +219,12 @@ func WriteCrontab(cron string) error {
 		// Check if the temp file contains the zabbix agent crontab
 		pattern := regexp.MustCompile(`^[^#].*zabbix_agentd`)
 		if pattern.MatchString(line) {
-			isContais = 1
+			isCronExists = 1
 		}
 	}
-	// Delete the temp file
-	err = os.Remove(srcCronFileAbsPath)
-	if err != nil {
-		return err
-	}
 	// If the source cron file contains the cron
-	if isContais == 1 {
-		return nil
+	if isCronExists == 1 {
+		return fmt.Errorf("crontab already exists")
 	}
 	// New zabbix_agentd crontab
 	dstCronFileAbsPath, err := NewCronFile(string(output) + cron)

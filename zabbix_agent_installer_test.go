@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
+	"os/exec"
 	"testing"
 	"time"
 )
@@ -38,4 +42,32 @@ func TestCheckProcess(t *testing.T) {
 	ShowAgentProcess()
 
 	t.Log("check ok")
+}
+
+func TestWriteCrontab(t *testing.T) {
+	// Get the source cron
+	cmd := exec.Command("crontab", "-l")
+	output, _ := cmd.Output()
+	t.Logf(string(output))
+
+	f := bytes.NewReader(output)
+	br := bufio.NewReader(f)
+	for {
+		line, err := br.ReadString('\n')
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			t.Log(err.Error())
+		}
+		t.Logf(line)
+	}
+}
+
+func TestWriteCrontab1(t *testing.T) {
+
+	cron := "*/10 * * * * /bin/sh /home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null\n"
+	err := WriteCrontab(cron)
+	if err != nil {
+		t.Logf(err.Error())
+	}
 }
