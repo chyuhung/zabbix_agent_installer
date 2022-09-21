@@ -8,7 +8,7 @@ import (
 )
 
 // 解压
-func Ungzip(src string, dst string) error {
+func UnGzip(src string, dst string) error {
 	gzipFile, err := os.Open(src)
 	if err != nil {
 		return err

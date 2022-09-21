@@ -43,7 +43,6 @@ func TestCheckProcess(t *testing.T) {
 	if err != nil {
 		return
 	}
-
 	t.Log("check ok")
 }
 

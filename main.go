@@ -19,7 +19,7 @@ import (
 
 var (
 	DefaultUser     = "cloud"
-	agentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
+	AgentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	OSType          = "linux"
 	OSArch          = "amd64"
 )
@@ -29,10 +29,17 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	// Receive the command
 	flag.StringVar(&server, "s", "", "zabbix server ip.")
 	flag.StringVar(&port, "p", "8001", "zabbix server port.")
-	flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
-	flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
 	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
+	switch OSType {
+	case "linux":
+		flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
+		flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
+	case "windows":
+		flag.StringVar(&user, "u", "", "zabbix agent user.")
+		flag.StringVar(&dir, "d", "c:\\", "zabbix agent directory,default is 'C:\\'.")
+	}
 	flag.Parse()
+
 	// serverIP,Required parameters
 	if IsEmptyString(server) {
 		Logger("ERROR", "must input the zabbix server ip")
@@ -50,7 +57,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		Logger("ERROR", "get current user failed "+err.Error())
 		os.Exit(1)
 	}
-	if currentUser != user {
+	if user != "" && currentUser != user {
 		if strings.Contains(currentUser, DefaultUser) {
 			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
@@ -150,8 +157,6 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 				if strings.Contains(filename, "win") {
 					avaFilenames = append(avaFilenames, filename)
 				}
-			default:
-				Logger("ERROR", fmt.Sprintf("unknown os type: %s", runtime.GOOS))
 			}
 		}
 	}
@@ -255,21 +260,19 @@ func main() {
 	case "linux":
 	case "windows":
 		DefaultUser = "Administrator"
-		agentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
+		AgentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	default:
 		Logger("ERROR", "OS type not supported")
 		os.Exit(1)
 	}
 	// Test URL
-	agentPackageURL = "http://10.191.101.254/zabbix-agent/"
+	AgentPackageURL = "http://10.191.101.254/zabbix-agent/"
 	// The link
-	Logger("INFO", fmt.Sprintf("url: %s", agentPackageURL))
+	Logger("INFO", fmt.Sprintf("url: %s", AgentPackageURL))
 
 	// Gets the key parameters
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := ScanParams()
-	if OSType == "windows" {
-		AgentDir = "C:\\"
-	}
+
 	// Output configuration information
 	Logger("INFO", fmt.Sprintf("ServerIP:%s", ServerIP))
 	Logger("INFO", fmt.Sprintf("ServerPort:%s", ServerPort))
@@ -290,7 +293,7 @@ func main() {
 		// There are no installation packages available in the directory
 		Logger("INFO", "starting to download...")
 
-		URLs, err := GetLinks(agentPackageURL)
+		URLs, err := GetLinks(AgentPackageURL)
 		if err != nil {
 			Logger("ERROR", err.Error())
 			os.Exit(1)
@@ -307,68 +310,101 @@ func main() {
 		}
 	}
 	Logger("INFO", fmt.Sprintf("get the package name is %s", packageName))
+
 	// Configure the path
 	packageAbsPath := filepath.Join(AgentDir, packageName)
-	zabbixDirAbsPath := filepath.Join(AgentDir, "zabbix_agentd")
-	zabbixAbsPath := filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
-	zabbixConfAbsPath := filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
+	zabbixDirAbsPath := ""
+	zabbixAbsPath := ""
+	zabbixConfAbsPath := ""
+	switch OSType {
+	case "linux":
+		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix_agentd")
+		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
+		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
+	case "windows":
+		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix")
+		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
+		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "/conf/zabbix_agentd.conf")
+	}
 
 	// Unzip the installation package and extract it to the current folder
-	Logger("INFO", fmt.Sprintf("starting untar %s", packageAbsPath))
-	err = utils.Untar(packageAbsPath, AgentDir)
-	if err != nil {
-		Logger("ERROR", "ungzip failed "+err.Error())
-		os.Exit(1)
+	Logger("INFO", fmt.Sprintf("starting unpacking %s", packageAbsPath))
+	if strings.Contains(packageName, ".zip") {
+		err = utils.UnZip(packageAbsPath, AgentDir)
+		if err != nil {
+			Logger("ERROR", "UnZip failed "+err.Error())
+			os.Exit(1)
+		}
+	} else if strings.Contains(packageName, ".tar.gz") {
+		err = utils.Untar(packageAbsPath, AgentDir)
+		if err != nil {
+			Logger("ERROR", "UnGzip failed "+err.Error())
+			os.Exit(1)
+		}
+	} else {
+		Logger("ERROR", "unknown format"+err.Error())
 	}
-	Logger("INFO", fmt.Sprintf("untar %s successfully", packageAbsPath))
+	Logger("INFO", fmt.Sprintf("unpacking %s successfully", packageAbsPath))
 
 	// Write configuration
-	confArgsMap := make(map[string]string, 3)
-	confArgsMap["%change_basepath%"] = zabbixDirAbsPath
-	confArgsMap["%change_serverip%"] = ServerIP
-	confArgsMap["%change_hostname%"] = AgentIP
-	Logger("INFO", "starting to modify the zabbix agent conf")
-	err = ReplaceString(zabbixConfAbsPath, confArgsMap)
-	if err != nil {
-		Logger("", err.Error())
-		os.Exit(1)
+	switch OSType {
+	case "linux":
+
+		confArgsMap := make(map[string]string, 3)
+		confArgsMap["%change_basepath%"] = zabbixDirAbsPath
+		confArgsMap["%change_serverip%"] = ServerIP
+		confArgsMap["%change_hostname%"] = AgentIP
+		Logger("INFO", "starting to modify the zabbix agent conf")
+		err = ReplaceString(zabbixConfAbsPath, confArgsMap)
+		if err != nil {
+			Logger("", err.Error())
+			os.Exit(1)
+		}
+	case "windows":
+
 	}
 	Logger("INFO", "modify the zabbix agent conf successfully")
 
-	// Modify the startup script
-	rgsMap := make(map[string]string, 1)
-	rgsMap["%change_basepath%"] = zabbixDirAbsPath
-	Logger("INFO", "starting to modify the zabbix agent script")
-	err = ReplaceString(zabbixAbsPath, rgsMap)
-	if err != nil {
-		Logger("ERROR", err.Error())
-		os.Exit(1)
-	}
-	Logger("INFO", "modify the zabbix agent script successfully")
-
-	// Start zabbix
-	Logger("INFO", "starting to start the zabbix agent")
-	err = StartAgent(zabbixAbsPath)
-	if err != nil {
-		Logger("ERROR", err.Error())
-		os.Exit(1)
-	}
-	Logger("INFO", "starting the zabbix agent successfully")
-
-	// Check the process
-	p := GetProcess()
-	for pid, name := range p {
-		if strings.Contains(name, "zabbix_agentd") {
-			fmt.Printf("pid:%d, name:%s\n", pid, name)
+	switch OSType {
+	case "linux":
+		// Modify the startup script
+		rgsMap := make(map[string]string, 1)
+		rgsMap["%change_basepath%"] = zabbixDirAbsPath
+		Logger("INFO", "starting to modify the zabbix agent script")
+		err = ReplaceString(zabbixAbsPath, rgsMap)
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
 		}
+		Logger("INFO", "modify the zabbix agent script successfully")
+
+		// Start zabbix
+		Logger("INFO", "starting to start the zabbix agent")
+		err = StartAgent(zabbixAbsPath)
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+		Logger("INFO", "starting the zabbix agent successfully")
+
+		// Check the process
+		p := GetProcess()
+		for pid, name := range p {
+			if strings.Contains(name, "zabbix_agentd") {
+				fmt.Printf("pid:%d, name:%s\n", pid, name)
+			}
+		}
+		// Write the cron
+		Logger("INFO", "starting write cron")
+		cron := "*/10 * * * * /bin/sh /home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null\n"
+		err = WriteCrontab(cron)
+		if err != nil {
+			Logger("ERROR", err.Error())
+		}
+		Logger("INFO", "write crontab successfully")
+	case "windows":
+
 	}
-	// Write the cron
-	Logger("INFO", "starting write cron")
-	cron := "*/10 * * * * /bin/sh /home/test/zabbix_agentd/zabbix_script.sh daemon 2>&1 > /dev/null\n"
-	err = WriteCrontab(cron)
-	if err != nil {
-		Logger("ERROR", err.Error())
-	}
-	Logger("INFO", "write crontab successfully")
+
 	Logger("INFO", "the zabbix agent installer is running done")
 }

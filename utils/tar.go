@@ -69,12 +69,3 @@ func Untar(src string, dst string) error {
 		}
 	}
 }
-
-// 打包
-func Tar(src string, dst string) error {
-	_, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	return nil
-}
