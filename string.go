@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -75,7 +77,53 @@ func ReplaceString(filePath string, args map[string]string) error {
 	return nil
 }
 
-// once s not contains the one of ss , return false
+// RewriteLine replace rows when the row matches re
+func RewriteLine(lines []byte, re *regexp.Regexp, s string) ([]byte, error) {
+	br := bytes.NewReader(lines)
+	b := bufio.NewReader(br)
+	for {
+		line, err := b.ReadString('\n')
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		if re.MatchString(line) {
+			if !strings.Contains(s, "\n") {
+				s += "\n"
+			}
+			line = s
+		}
+	}
+	return lines, nil
+}
+
+func RewriteLines(lines []byte, reMap map[*regexp.Regexp]string) ([]byte, error) {
+	var result []byte
+	br := bytes.NewReader(lines)
+	b := bufio.NewReader(br)
+	for {
+		line, err := b.ReadString('\n')
+		if err == io.EOF && line == "" {
+			break
+		} else if err != nil && line == "" {
+			return nil, err
+		}
+		for k, v := range reMap {
+			if k.MatchString(line) {
+				line = v
+				break
+			}
+		}
+		if !strings.Contains(line, "\n") {
+			line += "\n"
+		}
+		result = append(result[:], line...)
+	}
+	return result, nil
+}
+
+// IsContainsAnd once s not contains the one of ss , return false
 func IsContainsAnd(s string, ss []string) bool {
 	for i := range ss {
 		if !strings.Contains(s, ss[i]) {
@@ -85,7 +133,7 @@ func IsContainsAnd(s string, ss []string) bool {
 	return true
 }
 
-// if s contains one of ss, return true
+// IsContainsOr if s contains one of ss, return true
 func IsContainsOr(s string, ss []string) bool {
 	for i := range ss {
 		if strings.Contains(s, ss[i]) {

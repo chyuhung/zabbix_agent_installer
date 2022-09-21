@@ -2,7 +2,6 @@ package utils
 
 import (
 	"archive/zip"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,7 +19,10 @@ func UnZip(src, dst string) error {
 		}
 	}()
 
-	os.MkdirAll(dst, 0755)
+	err = os.MkdirAll(dst, 0755)
+	if err != nil {
+		return err
+	}
 
 	// Closure to address file descriptors issue with all the deferred .Close() methods
 	extractAndWriteFile := func(f *zip.File) error {
@@ -38,7 +40,7 @@ func UnZip(src, dst string) error {
 
 		// Check for ZipSlip (Directory traversal)
 		if !strings.HasPrefix(path, filepath.Clean(dst)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path: %s", path)
+			//return fmt.Errorf("illegal file path: %s", path)
 		}
 
 		if f.FileInfo().IsDir() {

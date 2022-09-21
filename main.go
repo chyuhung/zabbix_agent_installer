@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/big"
 	"os"
 	"os/exec"
@@ -323,8 +324,8 @@ func main() {
 		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
 	case "windows":
 		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix")
-		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
-		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "/conf/zabbix_agentd.conf")
+		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "\\bin\\", "\\zabbix_agentd.exe")
+		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "\\conf\\zabbix_agentd.conf")
 	}
 
 	// Unzip the installation package and extract it to the current folder
@@ -349,7 +350,6 @@ func main() {
 	// Write configuration
 	switch OSType {
 	case "linux":
-
 		confArgsMap := make(map[string]string, 3)
 		confArgsMap["%change_basepath%"] = zabbixDirAbsPath
 		confArgsMap["%change_serverip%"] = ServerIP
@@ -361,10 +361,38 @@ func main() {
 			os.Exit(1)
 		}
 	case "windows":
-
+		reMap := map[*regexp.Regexp]string{regexp.MustCompile(`.*ServerActive=.*`): "ServerActive=" + ServerIP,
+			regexp.MustCompile(`.*Hostname=.*`): "Hostname=" + AgentIP,
+		}
+		f, err := os.OpenFile(zabbixConfAbsPath, os.O_RDWR, os.ModePerm)
+		defer func(f *os.File) {
+			err := f.Close()
+			if err != nil {
+				return
+			}
+		}(f)
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+		all, err := ioutil.ReadAll(f)
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+		result, err := RewriteLines(all, reMap)
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+		_, err = f.Write(result)
+		if err != nil {
+			Logger("ERROR", err.Error())
+		}
 	}
 	Logger("INFO", "modify the zabbix agent conf successfully")
 
+	// Start zabbix agent
 	switch OSType {
 	case "linux":
 		// Modify the startup script
@@ -403,7 +431,40 @@ func main() {
 		}
 		Logger("INFO", "write crontab successfully")
 	case "windows":
+		/*err := os.Chdir(filepath.Join(zabbixDirAbsPath, "\\bin\\"))
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}*/
+		// Stop all zabbix agent
+		cmd := exec.Command("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
+		err := cmd.Run()
+		if err != nil {
+			Logger("ERROR", err.Error())
+		}
 
+		// Uninstall zabbix agent
+		cmd = exec.Command(zabbixAbsPath, "-c", "c:\\zabbix\\conf\\zabbix_agentd.conf", "-d")
+		err = cmd.Run()
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+
+		// Install zabbix agent
+		cmd = exec.Command(zabbixAbsPath, "-c", "c:\\zabbix\\conf\\zabbix_agentd.conf", "-i")
+		err = cmd.Run()
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
+		// Start zabbix agent
+		cmd = exec.Command(zabbixAbsPath, " -c", "c:\\zabbix\\conf\\zabbix_agentd.conf", "-s")
+		err = cmd.Run()
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
 	}
 
 	Logger("INFO", "the zabbix agent installer is running done")
