@@ -327,6 +327,7 @@ func main() {
 		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "bin", "zabbix_agentd.exe")
 		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "conf", "zabbix_agentd.conf")
 		info, err := os.Stat(zabbixDirAbsPath)
+		// Check the dir
 		fm := info.Mode()
 		if fm.IsRegular() {
 			Logger("ERROR", fmt.Sprintf("path %s already in use.", zabbixDirAbsPath))
