@@ -29,7 +29,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	flag.StringVar(&server, "s", "", "zabbix server ip.")
 	flag.StringVar(&port, "p", "8001", "zabbix server port.")
 	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
-	flag.StringVar(&packageURL, "l", "", "zabbix agent package URL.")
+	flag.StringVar(&packageURL, "l", "", "zabbix agent package URL. Download from the URL if no package in the dir.")
 	switch OSType {
 	case "linux":
 		flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
@@ -287,20 +287,20 @@ func main() {
 		Logger("WARN", err.Error())
 		// There are no installation packages available in the directory
 		Logger("INFO", "starting to search package from URL...")
-		// Test URL
-		//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
-		// The link
-		Logger("INFO", fmt.Sprintf("default package dir: %s", PackageDirURL))
-		Logger("INFO", "starting to download...")
-		URLs, err := GetLinks(PackageDirURL)
-		if err != nil {
-			Logger("ERROR", err.Error())
-			os.Exit(1)
-		}
 		if PackageURL == "" {
+			Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
+			// Test URL
+			//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
+			// The link
+			Logger("INFO", fmt.Sprintf("default package dir: %s", PackageDirURL))
+			Logger("INFO", "starting to download...")
+			URLs, err := GetLinks(PackageDirURL)
+			if err != nil {
+				Logger("ERROR", err.Error())
+				os.Exit(1)
+			}
 			PackageURL = GetZabbixAgentLink(URLs)
 		}
-		Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
 
 		// Download the installation package and save it in agentDir
 		Logger("INFO", "Downloading the zabbix package ...")
