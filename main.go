@@ -24,18 +24,19 @@ var (
 )
 
 // ScanParams Read the parameters from stdin
-func ScanParams() (server string, port string, user string, dir string, agent string) {
+func ScanParams() (server string, port string, user string, dir string, agent string, packageURL string) {
 	// Receive the command
 	flag.StringVar(&server, "s", "", "zabbix server ip.")
 	flag.StringVar(&port, "p", "8001", "zabbix server port.")
 	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
+	flag.StringVar(&packageURL, "l", "", "zabbix agent package URL.")
 	switch OSType {
 	case "linux":
 		flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
 		flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
 	case "windows":
 		flag.StringVar(&user, "u", "", "zabbix agent user.")
-		flag.StringVar(&dir, "d", "c:\\", "zabbix agent directory,default is 'C:\\'.")
+		flag.StringVar(&dir, "d", "c:\\", "zabbix agent directory.")
 	}
 	flag.Parse()
 
@@ -95,7 +96,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		Logger("INFO", fmt.Sprintf("connect to %s:%s successfully", server, port))
 	}
 
-	return server, port, user, dir, agent
+	return server, port, user, dir, agent, packageURL
 }
 
 // GetZabbixAgentLink returns the zabbix agent link
@@ -247,7 +248,7 @@ func WriteCrontab(cron string) error {
 	return nil
 }
 func main() {
-	AgentPackageURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
+	PackageDirURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	// System type
 	OSType = runtime.GOOS
 	// Architecture Type
@@ -259,46 +260,51 @@ func main() {
 	switch OSType {
 	case "windows":
 		DefaultUser = "Administrator"
-		AgentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
+		PackageDirURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	default:
 		Logger("ERROR", "OS type not supported.")
 		os.Exit(1)
 	}
-	// Test URL
-	//AgentPackageURL = "http://10.191.101.254/zabbix-agent/"
-	// The link
-	Logger("INFO", fmt.Sprintf("url: %s", AgentPackageURL))
 
 	// Gets the key parameters
-	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := ScanParams()
+	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL := ScanParams()
 	// Output configuration information
-	Logger("INFO", "ServerIP:", ServerIP, "ServerPort:", ServerPort, "AgentUser:", AgentUser, "AgentDir:", AgentDir, "AgentIP:", AgentIP)
+	Logger("INFO", "ServerIP:", ServerIP, "ServerPort:", ServerPort, "AgentUser:", AgentUser, "AgentDir:", AgentDir, "AgentIP:", AgentIP, "PackageURL", PackageURL)
 
 	// Check the package
+	// Get all filenames of current dir
 	filenames, err := GetFileNames(AgentDir)
 	if err != nil {
 		Logger("", err.Error())
 		os.Exit(1)
 	}
 	Logger("WARN", "get filenames successfully.")
+	// Check if there have package name with zabbix agent
 	Logger("INFO", "starting to get the zabbix agent package name.")
 	packageName, err := GetZabbixAgentPackageName(filenames)
+	// if no package found,ready to download from url
 	if err != nil {
 		Logger("WARN", err.Error())
 		// There are no installation packages available in the directory
+		Logger("INFO", "starting to search package from URL...")
+		// Test URL
+		//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
+		// The link
+		Logger("INFO", fmt.Sprintf("default package dir: %s", PackageDirURL))
 		Logger("INFO", "starting to download...")
-
-		URLs, err := GetLinks(AgentPackageURL)
+		URLs, err := GetLinks(PackageDirURL)
 		if err != nil {
 			Logger("ERROR", err.Error())
 			os.Exit(1)
 		}
-		zaLink := GetZabbixAgentLink(URLs)
-		Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", zaLink))
+		if PackageURL == "" {
+			PackageURL = GetZabbixAgentLink(URLs)
+		}
+		Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
 
 		// Download the installation package and save it in agentDir
 		Logger("INFO", "Downloading the zabbix package ...")
-		packageName, err = DownloadPackage(zaLink, AgentDir)
+		packageName, err = DownloadPackage(PackageURL, AgentDir)
 		if err != nil {
 			Logger("ERROR", err.Error())
 			os.Exit(1)

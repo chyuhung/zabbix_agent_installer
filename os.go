@@ -1,16 +1,15 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 
 	"github.com/shirou/gopsutil/process"
 )
 
-// Gets the filename under path, ignoring the folder
+// GetFileNames Gets the filename under path, ignoring the folder
 func GetFileNames(absPath string) ([]string, error) {
 	var myFiles []string
-	files, err := ioutil.ReadDir(absPath)
+	files, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil, err
 	}
