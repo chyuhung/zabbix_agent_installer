@@ -265,7 +265,7 @@ func main() {
 		os.Exit(1)
 	}
 	// Test URL
-	AgentPackageURL = "http://10.191.101.254/zabbix-agent/"
+	//AgentPackageURL = "http://10.191.101.254/zabbix-agent/"
 	// The link
 	Logger("INFO", fmt.Sprintf("url: %s", AgentPackageURL))
 
