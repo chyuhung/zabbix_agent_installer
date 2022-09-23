@@ -22,7 +22,7 @@ func Logger(level string, messages ...string) {
 	}
 	// Replace '\n' to ' '
 	for i := range messages {
-		result += ReplaceOthers(messages[i])
+		result += ReplaceOthers(messages[i]) + " "
 	}
 	fmt.Printf("[%s] %s\n", level, result)
 }

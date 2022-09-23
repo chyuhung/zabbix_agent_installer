@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"os/exec"
@@ -19,10 +18,9 @@ import (
 )
 
 var (
-	DefaultUser     = "cloud"
-	AgentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
-	OSType          = "linux"
-	OSArch          = "amd64"
+	DefaultUser = "cloud"
+	OSType      = "linux"
+	OSArch      = "amd64"
 )
 
 // ScanParams Read the parameters from stdin
@@ -53,13 +51,13 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	// agentUser
 	// If you do not specify a user, you use the cloud user by default, if the cloud does not exist, then panic, cloud exists to check whether it is currently cloud, yes is installed, not panic;
 	// If a user is specified, check if the user exists, check whether the user is currently the specified user, exists and is the current user is installed, otherwise panic
-	currentUser, err := GetCurrentUser()
+	currentUser, err := GetCurrentUser() // test in WinServer2008sp2: WIN-0SH02HNMDMU\Administrator
 	if err != nil {
 		Logger("ERROR", "get current user failed "+err.Error())
 		os.Exit(1)
 	}
 	if user != "" && currentUser != user {
-		if strings.Contains(currentUser, DefaultUser) {
+		if strings.Contains(currentUser, DefaultUser) { // Linux "cloud",Windows "Administrator"
 			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
 		} else {
@@ -249,6 +247,7 @@ func WriteCrontab(cron string) error {
 	return nil
 }
 func main() {
+	AgentPackageURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	// System type
 	OSType = runtime.GOOS
 	// Architecture Type
@@ -258,7 +257,6 @@ func main() {
 		os.Exit(1)
 	}
 	switch OSType {
-	case "linux":
 	case "windows":
 		DefaultUser = "Administrator"
 		AgentPackageURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
@@ -273,20 +271,16 @@ func main() {
 
 	// Gets the key parameters
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP := ScanParams()
-
 	// Output configuration information
-	Logger("INFO", fmt.Sprintf("ServerIP:%s", ServerIP))
-	Logger("INFO", fmt.Sprintf("ServerPort:%s", ServerPort))
-	Logger("INFO", fmt.Sprintf("AgentUser:%s", AgentUser))
-	Logger("INFO", fmt.Sprintf("AgentDir:%s", AgentDir))
-	Logger("INFO", fmt.Sprintf("AgentIP:%s", AgentIP))
+	Logger("INFO", "ServerIP:", ServerIP, "ServerPort:", ServerPort, "AgentUser:", AgentUser, "AgentDir:", AgentDir, "AgentIP:", AgentIP)
+
 	// Check the package
 	filenames, err := GetFileNames(AgentDir)
 	if err != nil {
 		Logger("", err.Error())
 		os.Exit(1)
 	}
-	Logger("INFO", "get filenames successfully.")
+	Logger("WARN", "get filenames successfully.")
 	Logger("INFO", "starting to get the zabbix agent package name.")
 	packageName, err := GetZabbixAgentPackageName(filenames)
 	if err != nil {
@@ -314,9 +308,7 @@ func main() {
 
 	// Configure the path
 	packageAbsPath := filepath.Join(AgentDir, packageName)
-	zabbixDirAbsPath := ""
-	zabbixAbsPath := ""
-	zabbixConfAbsPath := ""
+	var zabbixDirAbsPath, zabbixAbsPath, zabbixConfAbsPath string
 	switch OSType {
 	case "linux":
 		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix_agentd")
@@ -394,7 +386,7 @@ func main() {
 			Logger("ERROR", "open file failed."+err.Error())
 			os.Exit(1)
 		}
-		all, err := ioutil.ReadAll(f)
+		all, err := io.ReadAll(f)
 		if err != nil {
 			Logger("ERROR", "read all failed."+err.Error())
 			os.Exit(1)
@@ -482,13 +474,7 @@ func main() {
 			Logger("ERROR", "change current dir failed."+err.Error())
 			os.Exit(1)
 		}
-		/*// Stop all zabbix agent
-		_, err = RunWinCommand("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
-		if err != nil {
-			Logger("WARN", "stop zabbix agent failed.", err.Error())
-		} else {
-			Logger("INFO", "stop zabbix agent successfully.")
-		}*/
+
 		// Uninstall zabbix agent
 		_, err = RunWinCommand(zabbixAbsPath, "-c", zabbixConfAbsPath, "-d")
 		if err != nil {
