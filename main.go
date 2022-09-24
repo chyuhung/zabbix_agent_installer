@@ -57,7 +57,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		Logger("ERROR", "get current user failed "+err.Error())
 		os.Exit(1)
 	}
-	if user != "" && currentUser != user {
+	if user != "" && user != currentUser {
 		if strings.Contains(currentUser, DefaultUser) { // Linux "cloud",Windows "Administrator"
 			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
 			os.Exit(1)
