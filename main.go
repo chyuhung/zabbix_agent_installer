@@ -269,7 +269,12 @@ func main() {
 	// Gets the key parameters
 	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL := ScanParams()
 	// Output configuration information
-	Logger("INFO", "ServerIP:", ServerIP, "ServerPort:", ServerPort, "AgentUser:", AgentUser, "AgentDir:", AgentDir, "AgentIP:", AgentIP, "PackageURL", PackageURL)
+	Logger("INFO", "ServerIP:", ServerIP)
+	Logger("INFO", "ServerPort:", ServerPort)
+	Logger("INFO", "AgentUser:", AgentUser)
+	Logger("INFO", "AgentDir:", AgentDir)
+	Logger("INFO", "AgentIP:", AgentIP)
+	Logger("INFO", "PackageURL:", PackageURL)
 
 	// Check the package
 	// Get all filenames of current dir
