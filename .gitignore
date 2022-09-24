@@ -1,2 +1,3 @@
 *.exe
 .idea*
+zabbix_agent_installer
