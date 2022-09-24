@@ -258,6 +258,7 @@ func main() {
 		os.Exit(1)
 	}
 	switch OSType {
+	case "linux":
 	case "windows":
 		DefaultUser = "Administrator"
 		PackageDirURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
