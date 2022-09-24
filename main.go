@@ -290,9 +290,9 @@ func main() {
 	// if no package found,ready to download from url
 	if err != nil {
 		Logger("WARN", err.Error())
-		// There are no installation packages available in the directory
-		Logger("INFO", "starting to search package from URL...")
 		if PackageURL == "" {
+			// There are no installation packages available in the directory
+			Logger("INFO", "starting to search package from URL...")
 			Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
 			// Test URL
 			//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
@@ -330,29 +330,35 @@ func main() {
 		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "bin", "zabbix_agentd.exe")
 		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "conf", "zabbix_agentd.conf")
 		info, err := os.Stat(zabbixDirAbsPath)
-		// Check the dir
-		fm := info.Mode()
-		if fm.IsRegular() {
-			Logger("ERROR", fmt.Sprintf("path %s already in use.", zabbixDirAbsPath))
-			os.Exit(1)
-		} else if fm.IsDir() {
-			// Stop all zabbix agent
-			_, err = RunWinCommand("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
-			if err != nil {
-				Logger("ERROR", "stop zabbix agent failed.", err.Error())
-				Logger("INFO", "the directory may be occupied by other programs")
-				os.Exit(1)
-			} else {
-				Logger("INFO", "stop zabbix agent successfully.")
-			}
-		}
 		if err != nil {
 			if os.IsNotExist(err) {
 				err := os.MkdirAll(zabbixDirAbsPath, os.ModePerm)
 				if err != nil {
-					Logger("ERROR", "mkdir failed."+err.Error())
+					Logger("ERROR", "mkdir failed.", err.Error())
+				}
+			} else {
+				Logger("ERROR", err.Error())
+				os.Exit(1)
+			}
+		}
+		// Check the dir
+		infoMode := info.Mode()
+		if infoMode.IsDir() {
+			dir, _ := os.ReadDir(zabbixDirAbsPath)
+			if len(dir) != 0 {
+				// Stop all zabbix agent
+				_, err = RunWinCommand("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
+				if err != nil {
+					Logger("ERROR", "stop zabbix agent failed.", err.Error())
+					Logger("INFO", "the directory may be occupied by other programs")
+					os.Exit(1)
+				} else {
+					Logger("INFO", "stop zabbix agent successfully.")
 				}
 			}
+		} else {
+			Logger("ERROR", fmt.Sprintf("path %s already in use.", zabbixDirAbsPath))
+			os.Exit(1)
 		}
 	}
 
@@ -361,17 +367,18 @@ func main() {
 	if strings.Contains(packageName, ".zip") {
 		err = utils.UnZip(packageAbsPath, AgentDir)
 		if err != nil {
-			Logger("ERROR", "UnZip failed."+err.Error())
+			Logger("ERROR", "unzip failed.", err.Error())
 			os.Exit(1)
 		}
 	} else if strings.Contains(packageName, ".tar.gz") {
 		err = utils.Untar(packageAbsPath, AgentDir)
 		if err != nil {
-			Logger("ERROR", "UnGzip failed."+err.Error())
+			Logger("ERROR", "unGzip failed.", err.Error())
 			os.Exit(1)
 		}
 	} else {
-		Logger("ERROR", "unknown format."+err.Error())
+		Logger("ERROR", "unknown package format. check the package URL.")
+		os.Exit(1)
 	}
 	Logger("INFO", fmt.Sprintf("unpacking %s successfully.", packageAbsPath))
 
