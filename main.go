@@ -24,12 +24,13 @@ var (
 )
 
 // ScanParams Read the parameters from stdin
-func ScanParams() (server string, port string, user string, dir string, agent string, packageURL string) {
+func ScanParams() (server string, port string, user string, dir string, agent string, packageURL string, packageName string) {
 	// Receive the command
 	flag.StringVar(&server, "s", "", "zabbix server ip.")
 	flag.StringVar(&port, "p", "8001", "zabbix server port.")
 	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
 	flag.StringVar(&packageURL, "l", "", "zabbix agent package URL. Download from the URL if no package in the dir.")
+	flag.StringVar(&packageName, "f", "", "zabbix agent package name.")
 	switch OSType {
 	case "linux":
 		flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
@@ -96,7 +97,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		Logger("INFO", fmt.Sprintf("connect to %s:%s successfully", server, port))
 	}
 
-	return server, port, user, dir, agent, packageURL
+	return server, port, user, dir, agent, packageURL, packageName
 }
 
 // GetZabbixAgentLink returns the zabbix agent link
@@ -146,7 +147,32 @@ func GetZabbixAgentLink(links []string) string {
 // GetZabbixAgentPackageName Filter zabbix installation package names
 func GetZabbixAgentPackageName(filenames []string) (string, error) {
 	var avaFilenames []string
-	for _, filename := range filenames {
+	switch runtime.GOOS {
+	case "linux":
+		reg, err := regexp.Compile(`zabbix.*agent.*linux.*\.tar\.gz`)
+		if err != nil {
+			return "", err
+		}
+		for _, filename := range filenames {
+			if reg.MatchString(filename) {
+				avaFilenames = append(avaFilenames, filename)
+			}
+		}
+	case "windows":
+		reg, err := regexp.Compile(`zabbix.*agent.*win.*\.zip`)
+		if err != nil {
+			return "", err
+		}
+		for _, filename := range filenames {
+			if reg.MatchString(filename) {
+				avaFilenames = append(avaFilenames, filename)
+			}
+		}
+	default:
+		return "", fmt.Errorf("unsupported operating system")
+	}
+
+	/*
 		if IsContainsAnd(filename, []string{"zabbix", "agent"}) && IsContainsOr(filename, []string{".tar.gz", ".zip"}) {
 			switch runtime.GOOS {
 			case "linux":
@@ -158,8 +184,8 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 					avaFilenames = append(avaFilenames, filename)
 				}
 			}
-		}
-	}
+		}*/
+
 	if len(avaFilenames) == 0 {
 		return "", fmt.Errorf("no package found")
 	}
@@ -268,7 +294,7 @@ func main() {
 	}
 
 	// Gets the key parameters
-	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL := ScanParams()
+	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL, PackageName := ScanParams()
 	// Output configuration information
 	Logger("INFO", "ServerIP:", ServerIP)
 	Logger("INFO", "ServerPort:", ServerPort)
@@ -276,50 +302,55 @@ func main() {
 	Logger("INFO", "AgentDir:", AgentDir)
 	Logger("INFO", "AgentIP:", AgentIP)
 	Logger("INFO", "PackageURL:", PackageURL)
+	Logger("INFO", "PackageName:", PackageName)
 
-	// Check the package
-	// Get all filenames of current dir
-	filenames, err := GetFileNames(AgentDir)
-	if err != nil {
-		Logger("", err.Error())
-		os.Exit(1)
-	}
-	Logger("WARN", "get filenames successfully.")
-	// Check if there have package name with zabbix agent
-	Logger("INFO", "starting to get the zabbix agent package name.")
-	packageName, err := GetZabbixAgentPackageName(filenames)
-	// if no package found,ready to download from url
-	if err != nil {
-		Logger("WARN", err.Error())
-		if PackageURL == "" {
-			// There are no installation packages available in the directory
-			Logger("INFO", "starting to search package from URL...")
-			Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
-			// Test URL
-			//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
-			// The link
-			Logger("INFO", fmt.Sprintf("default package dir: %s", PackageDirURL))
-			Logger("INFO", "starting to download...")
-			URLs, err := GetLinks(PackageDirURL)
+	// Use the package that user specified,otherwise use the package which found in the curr dir,then use the package
+	// find from the URL
+	if PackageName == "" {
+		// Check the package
+		// Get all filenames of current dir
+		filenames, err := GetFileNames(AgentDir)
+		if err != nil {
+			Logger("", err.Error())
+			os.Exit(1)
+		}
+		Logger("WARN", "get filenames successfully.")
+		// Check if there have package name with zabbix agent
+		Logger("INFO", "starting to get the zabbix agent package name.")
+		PackageName, err = GetZabbixAgentPackageName(filenames)
+		// if no package found,ready to download from url
+		if err != nil {
+			Logger("WARN", err.Error())
+			if PackageURL == "" {
+				// There are no installation packages available in the directory
+				Logger("INFO", "starting to search package from URL...")
+				Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
+				// Test URL
+				//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
+				// The link
+				Logger("INFO", fmt.Sprintf("default package dir: %s", PackageDirURL))
+				Logger("INFO", "starting to download...")
+				URLs, err := GetLinks(PackageDirURL)
+				if err != nil {
+					Logger("ERROR", err.Error())
+					os.Exit(1)
+				}
+				PackageURL = GetZabbixAgentLink(URLs)
+			}
+
+			// Download the installation package and save it in agentDir
+			Logger("INFO", "Downloading the zabbix package ...")
+			PackageName, err = DownloadPackage(PackageURL, AgentDir)
 			if err != nil {
 				Logger("ERROR", err.Error())
 				os.Exit(1)
 			}
-			PackageURL = GetZabbixAgentLink(URLs)
-		}
-
-		// Download the installation package and save it in agentDir
-		Logger("INFO", "Downloading the zabbix package ...")
-		packageName, err = DownloadPackage(PackageURL, AgentDir)
-		if err != nil {
-			Logger("ERROR", err.Error())
-			os.Exit(1)
 		}
 	}
-	Logger("INFO", fmt.Sprintf("get the package name is %s", packageName))
+	Logger("INFO", fmt.Sprintf("get the package name is %s", PackageName))
 
 	// Configure the path
-	packageAbsPath := filepath.Join(AgentDir, packageName)
+	packageAbsPath := filepath.Join(AgentDir, PackageName)
 	var zabbixDirAbsPath, zabbixAbsPath, zabbixConfAbsPath string
 	switch OSType {
 	case "linux":
@@ -365,14 +396,14 @@ func main() {
 
 	// Unzip the installation package and extract it to the current folder
 	Logger("INFO", fmt.Sprintf("starting unpacking %s", packageAbsPath))
-	if strings.Contains(packageName, ".zip") {
-		err = utils.UnZip(packageAbsPath, AgentDir)
+	if strings.Contains(PackageName, ".zip") {
+		err := utils.UnZip(packageAbsPath, AgentDir)
 		if err != nil {
 			Logger("ERROR", "unzip failed.", err.Error())
 			os.Exit(1)
 		}
-	} else if strings.Contains(packageName, ".tar.gz") {
-		err = utils.Untar(packageAbsPath, AgentDir)
+	} else if strings.Contains(PackageName, ".tar.gz") {
+		err := utils.Untar(packageAbsPath, AgentDir)
 		if err != nil {
 			Logger("ERROR", "unGzip failed.", err.Error())
 			os.Exit(1)
@@ -391,7 +422,7 @@ func main() {
 		confArgsMap["%change_serverip%"] = ServerIP
 		confArgsMap["%change_hostname%"] = AgentIP
 		Logger("INFO", "starting to modify the zabbix agent conf...")
-		err = ReplaceString(zabbixConfAbsPath, confArgsMap)
+		err := ReplaceString(zabbixConfAbsPath, confArgsMap)
 		if err != nil {
 			Logger("", "replace string failed."+err.Error())
 			os.Exit(1)
@@ -418,6 +449,10 @@ func main() {
 		// Write to temp file
 		tempFilePath := filepath.Join(zabbixConfAbsPath + RandStringBytes(6))
 		ft, err := os.OpenFile(tempFilePath, os.O_CREATE|(os.O_RDWR|os.O_TRUNC), os.ModePerm)
+		if err != nil {
+			Logger("ERROR", err.Error())
+			os.Exit(1)
+		}
 		_, err = ft.Write(result)
 		if err != nil {
 			Logger("ERROR", "write result failed."+err.Error())
@@ -456,7 +491,7 @@ func main() {
 		rgsMap := make(map[string]string, 1)
 		rgsMap["%change_basepath%"] = zabbixDirAbsPath
 		Logger("INFO", "starting to modify the zabbix agent script...")
-		err = ReplaceString(zabbixAbsPath, rgsMap)
+		err := ReplaceString(zabbixAbsPath, rgsMap)
 		if err != nil {
 			Logger("ERROR", err.Error())
 			os.Exit(1)
