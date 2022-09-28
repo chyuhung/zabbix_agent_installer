@@ -96,6 +96,16 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	} else {
 		Logger("INFO", fmt.Sprintf("connect to %s:%s successfully", server, port))
 	}
+	// packageURL
+	reg, err := regexp.Compile(`[a-zA-z]+://[^\s]*`)
+	if err != nil {
+		Logger("ERROR", err.Error())
+		os.Exit(1)
+	}
+	if !reg.MatchString("packageURL") {
+		Logger("ERROR", fmt.Sprintf("invalid package URL: %s", packageURL))
+		os.Exit(1)
+	}
 
 	return server, port, user, dir, agent, packageURL, packageName
 }
@@ -171,21 +181,6 @@ func GetZabbixAgentPackageName(filenames []string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported operating system")
 	}
-
-	/*
-		if IsContainsAnd(filename, []string{"zabbix", "agent"}) && IsContainsOr(filename, []string{".tar.gz", ".zip"}) {
-			switch runtime.GOOS {
-			case "linux":
-				if strings.Contains(filename, "linux") {
-					avaFilenames = append(avaFilenames, filename)
-				}
-			case "windows":
-				if strings.Contains(filename, "win") {
-					avaFilenames = append(avaFilenames, filename)
-				}
-			}
-		}*/
-
 	if len(avaFilenames) == 0 {
 		return "", fmt.Errorf("no package found")
 	}
