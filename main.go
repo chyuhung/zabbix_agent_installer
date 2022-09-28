@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
-	"flag"
 	"fmt"
 	"io"
 	"math/big"
@@ -17,12 +16,26 @@ import (
 	"zabbix_agent_installer/utils"
 )
 
+// Config represents the configuration.
+type Config struct {
+	ServerIP    string
+	ServerPort  string
+	AgentIP     string
+	AgentUser   string
+	AgentDir    string
+	PackageName string
+	PackageURL  string
+	OSType      string
+	OSArch      string
+}
+
 var (
-	DefaultUser = "cloud"
-	OSType      = "linux"
-	OSArch      = "amd64"
+	DEFAULT_USER = "cloud"
+	OS_TYPE      = "linux"
+	OS_ARCH      = "amd64"
 )
 
+/*
 // ScanParams Read the parameters from stdin
 func ScanParams() (server string, port string, user string, dir string, agent string, packageURL string, packageName string) {
 	// Receive the command
@@ -31,7 +44,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
 	flag.StringVar(&packageURL, "l", "", "zabbix agent package URL. Download from the URL if no package in the dir.")
 	flag.StringVar(&packageName, "f", "", "zabbix agent package name.")
-	switch OSType {
+	switch OS_TYPE {
 	case "linux":
 		flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
 		flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
@@ -59,8 +72,8 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 		os.Exit(1)
 	}
 	if user != "" && user != currentUser {
-		if strings.Contains(currentUser, DefaultUser) { // Linux "cloud",Windows "Administrator"
-			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DefaultUser))
+		if strings.Contains(currentUser, DEFAULT_USER) { // Linux "cloud",Windows "Administrator"
+			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DEFAULT_USER))
 			os.Exit(1)
 		} else {
 			Logger("ERROR", fmt.Sprintf("switch to the user %s then install", user))
@@ -108,7 +121,7 @@ func ScanParams() (server string, port string, user string, dir string, agent st
 	}
 
 	return server, port, user, dir, agent, packageURL, packageName
-}
+}*/
 
 // GetZabbixAgentLink returns the zabbix agent link
 func GetZabbixAgentLink(links []string) string {
@@ -269,20 +282,28 @@ func WriteCrontab(cron string) error {
 	return nil
 }
 func main() {
-	PackageDirURL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
+	var config = &Config{}
+	// Read the OS Info
+	ReadOSInfo(config)
+	// Read the configuration
+	ReadConfig(config)
+	// Process configuration
+	ProcessConfig(config)
+
+	PACKAGE_URL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
 	// System type
-	OSType = runtime.GOOS
+	OS_TYPE = runtime.GOOS
 	// Architecture Type
-	OSArch = runtime.GOARCH
-	if OSType == "" || OSArch == "" {
+	OS_ARCH = runtime.GOARCH
+	if OS_TYPE == "" || OS_ARCH == "" {
 		Logger("ERROR", "get OS info failed.")
 		os.Exit(1)
 	}
-	switch OSType {
+	switch OS_TYPE {
 	case "linux":
 	case "windows":
-		DefaultUser = "Administrator"
-		PackageDirURL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
+		DEFAULT_USER = "Administrator"
+		PACKAGE_URL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
 	default:
 		Logger("ERROR", "OS type not supported.")
 		os.Exit(1)
@@ -323,9 +344,9 @@ func main() {
 				// Test URL
 				//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
 				// The link
-				Logger("INFO", fmt.Sprintf("default package dir: %s", PackageDirURL))
+				Logger("INFO", fmt.Sprintf("default package dir: %s", PACKAGE_URL))
 				Logger("INFO", "starting to download...")
-				URLs, err := GetLinks(PackageDirURL)
+				URLs, err := GetLinks(PACKAGE_URL)
 				if err != nil {
 					Logger("ERROR", err.Error())
 					os.Exit(1)
@@ -347,7 +368,7 @@ func main() {
 	// Configure the path
 	packageAbsPath := filepath.Join(AgentDir, PackageName)
 	var zabbixDirAbsPath, zabbixAbsPath, zabbixConfAbsPath string
-	switch OSType {
+	switch OS_TYPE {
 	case "linux":
 		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix_agentd")
 		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
@@ -410,7 +431,7 @@ func main() {
 	Logger("INFO", fmt.Sprintf("unpacking %s successfully.", packageAbsPath))
 
 	// Write configuration
-	switch OSType {
+	switch OS_TYPE {
 	case "linux":
 		confArgsMap := make(map[string]string, 3)
 		confArgsMap["%change_basepath%"] = zabbixDirAbsPath
@@ -480,7 +501,7 @@ func main() {
 	Logger("INFO", "modify the zabbix agent conf successfully.")
 
 	// Start zabbix agent
-	switch OSType {
+	switch OS_TYPE {
 	case "linux":
 		// Modify the startup script
 		rgsMap := make(map[string]string, 1)
