@@ -29,175 +29,33 @@ type Config struct {
 	OSArch      string
 }
 
+type PathConfig struct {
+	PackageAbsPath         string
+	ZabbixAgentDirAbsPath  string
+	ZabbixAgentAbsPath     string
+	ZabbixAgentDirAbsPath  string
+	ZabbixAgentAbsPath     string
+	ZabbixAgentConfAbsPath string
+}
+
 var (
 	DEFAULT_USER = "cloud"
 	OS_TYPE      = "linux"
 	OS_ARCH      = "amd64"
 )
 
-/*
-// ScanParams Read the parameters from stdin
-func ScanParams() (server string, port string, user string, dir string, agent string, packageURL string, packageName string) {
-	// Receive the command
-	flag.StringVar(&server, "s", "", "zabbix server ip.")
-	flag.StringVar(&port, "p", "8001", "zabbix server port.")
-	flag.StringVar(&agent, "i", "", "zabbix agent ip,default is host's main ip.")
-	flag.StringVar(&packageURL, "l", "", "zabbix agent package URL. Download from the URL if no package in the dir.")
-	flag.StringVar(&packageName, "f", "", "zabbix agent package name.")
-	switch OS_TYPE {
+func ProcessPathConfig(config *Config, pathConfig *PathConfig) {
+	pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
+	switch config.OSType {
 	case "linux":
-		flag.StringVar(&user, "u", "cloud", "zabbix agent user.")
-		flag.StringVar(&dir, "d", "", "zabbix agent directory,default is current user's home directory.")
+		pathConfig.ZabbixAgentDirAbsPath = filepath.Join(config.AgentDir, "zabbix_agentd")
+		pathConfig.ZabbixAgentAbsPath = filepath.Join(pathConfig.ZabbixAgentDirAbsPath, "zabbix_script.sh")
+		pathConfig.ZabbixAgentConfAbsPath = filepath.Join(pathConfig.ZabbixAgentDirAbsPath, "/etc/zabbix_agentd.conf")
 	case "windows":
-		flag.StringVar(&user, "u", "", "zabbix agent user.")
-		flag.StringVar(&dir, "d", "c:\\", "zabbix agent directory.")
+		pathConfig.ZabbixAgentDirAbsPath = filepath.Join(config.AgentDir, "zabbix")
+		pathConfig.ZabbixAgentAbsPath = filepath.Join(pathConfig.ZabbixAgentDirAbsPath, "bin", "zabbix_agentd.exe")
+		pathConfig.ZabbixAgentConfAbsPath = filepath.Join(pathConfig.ZabbixAgentDirAbsPath, "conf", "zabbix_agentd.conf")
 	}
-	flag.Parse()
-
-	// serverIP,Required parameters
-	if IsEmptyString(server) {
-		Logger("ERROR", "must input the zabbix server ip")
-		os.Exit(1)
-	} else if !IsIPv4(server) {
-		Logger("ERROR", "invalid server ip")
-		os.Exit(1)
-	}
-
-	// agentUser
-	// If you do not specify a user, you use the cloud user by default, if the cloud does not exist, then panic, cloud exists to check whether it is currently cloud, yes is installed, not panic;
-	// If a user is specified, check if the user exists, check whether the user is currently the specified user, exists and is the current user is installed, otherwise panic
-	currentUser, err := GetCurrentUser() // test in WinServer2008sp2: WIN-0SH02HNMDMU\Administrator
-	if err != nil {
-		Logger("ERROR", "get current user failed "+err.Error())
-		os.Exit(1)
-	}
-	if user != "" && user != currentUser {
-		if strings.Contains(currentUser, DEFAULT_USER) { // Linux "cloud",Windows "Administrator"
-			Logger("ERROR", fmt.Sprintf("switch to default user %s then install", DEFAULT_USER))
-			os.Exit(1)
-		} else {
-			Logger("ERROR", fmt.Sprintf("switch to the user %s then install", user))
-			os.Exit(1)
-		}
-	}
-	// agentDir
-	if IsEmptyString(dir) {
-		dir, err = GetUserHomePath()
-		if err != nil {
-			Logger("ERROR", "get current user home dir failed "+err.Error())
-			os.Exit(1)
-		}
-	} else {
-		dir = filepath.Join(dir)
-		Logger("INFO", fmt.Sprintf("get current user home dir is %s", dir))
-	}
-
-	// agentIP
-	if IsEmptyString(agent) {
-		agent, err = GetMainIP()
-		if err != nil {
-			Logger("ERROR", "get agent ip failed "+err.Error())
-			os.Exit(1)
-		}
-	} else if !IsIPv4(agent) {
-		Logger("ERROR", "invalid agent ip")
-		os.Exit(1)
-	}
-	// serverPort
-	if IsUnreachable(server, port) {
-		Logger("WARN", fmt.Sprintf("connect to %s:%s failed", server, port))
-	} else {
-		Logger("INFO", fmt.Sprintf("connect to %s:%s successfully", server, port))
-	}
-	// packageURL
-	reg, err := regexp.Compile(`[a-zA-z]+://[^\s]*`)
-	if err != nil {
-		Logger("ERROR", err.Error())
-		os.Exit(1)
-	}
-	if !reg.MatchString("packageURL") {
-		Logger("ERROR", fmt.Sprintf("invalid package URL: %s", packageURL))
-		os.Exit(1)
-	}
-
-	return server, port, user, dir, agent, packageURL, packageName
-}*/
-
-// GetZabbixAgentLink returns the zabbix agent link
-func GetZabbixAgentLink(links []string) string {
-	var zaLinks []string
-	// Filter links that contain the keyword zabbix-agent or zabbix_agent
-	for i := range links {
-		if IsContainsOr(links[i], []string{"zabbix-agent", "zabbix_agent"}) {
-			zaLinks = append(zaLinks, links[i])
-		}
-	}
-	// OS type,windows or linux
-	ot := runtime.GOOS
-	// System architecture
-	oa := runtime.GOARCH
-	var avaLinks []string
-
-	switch ot {
-	case "windows":
-		for i := range zaLinks {
-			if IsContainsOr(links[i], []string{"amd64"}) && IsContainsAnd(zaLinks[i], []string{"win"}) {
-				avaLinks = append(avaLinks, zaLinks[i])
-			} else {
-				Logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
-			}
-		}
-	case "linux":
-		for i := range zaLinks {
-			if oa == "amd64" {
-				if IsContainsOr(zaLinks[i], []string{"amd64", "x86_64"}) && IsContainsAnd(zaLinks[i], []string{"linux"}) {
-					avaLinks = append(avaLinks, zaLinks[i])
-				}
-			} else if oa == "386" {
-				if IsContainsOr(zaLinks[i], []string{"386"}) && IsContainsAnd(zaLinks[i], []string{"linux"}) {
-					avaLinks = append(avaLinks, zaLinks[i])
-				}
-			} else {
-				Logger("ERROR", fmt.Sprintf("unknown OS arch:%s", oa))
-			}
-		}
-	default:
-		Logger("ERROR", fmt.Sprintf("unknown OS type:%s", ot))
-	}
-	return avaLinks[len(avaLinks)-1]
-}
-
-// GetZabbixAgentPackageName Filter zabbix installation package names
-func GetZabbixAgentPackageName(filenames []string) (string, error) {
-	var avaFilenames []string
-	switch runtime.GOOS {
-	case "linux":
-		reg, err := regexp.Compile(`zabbix.*agent.*linux.*\.tar\.gz`)
-		if err != nil {
-			return "", err
-		}
-		for _, filename := range filenames {
-			if reg.MatchString(filename) {
-				avaFilenames = append(avaFilenames, filename)
-			}
-		}
-	case "windows":
-		reg, err := regexp.Compile(`zabbix.*agent.*win.*\.zip`)
-		if err != nil {
-			return "", err
-		}
-		for _, filename := range filenames {
-			if reg.MatchString(filename) {
-				avaFilenames = append(avaFilenames, filename)
-			}
-		}
-	default:
-		return "", fmt.Errorf("unsupported operating system")
-	}
-	if len(avaFilenames) == 0 {
-		return "", fmt.Errorf("no package found")
-	}
-	return avaFilenames[len(avaFilenames)-1], nil
 }
 
 // NewCronFile Edit the crontab file
