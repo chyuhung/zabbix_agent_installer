@@ -46,7 +46,7 @@ const (
 	CONTINUE = false
 )
 
-func ProcessPathConfig(config *Config, pathConfig *PathConfig) {
+func ProcessPathConfig(config *Config, pathConfig *PathConfig) error {
 	switch config.OSType {
 	case "linux":
 		pathConfig.ZabbixAgentDirAbsPath = filepath.Join(config.AgentDir, "zabbix_agentd")
@@ -57,6 +57,26 @@ func ProcessPathConfig(config *Config, pathConfig *PathConfig) {
 		pathConfig.ZabbixAgentAbsPath = filepath.Join(pathConfig.ZabbixAgentDirAbsPath, "bin", "zabbix_agentd.exe")
 		pathConfig.ZabbixAgentConfAbsPath = filepath.Join(pathConfig.ZabbixAgentDirAbsPath, "conf", "zabbix_agentd.conf")
 	}
+	fileInfo, err := os.Stat(pathConfig.ZabbixAgentDirAbsPath)
+	if os.IsNotExist(err) {
+		err := os.MkdirAll(pathConfig.ZabbixAgentDirAbsPath, os.ModePerm)
+		return err
+	}
+	// Check the dir
+	fileMode := fileInfo.Mode()
+	if fileMode.IsDir() {
+		dir, err := os.ReadDir(pathConfig.ZabbixAgentDirAbsPath)
+		checkError(err, EXIT)
+		// if OS type is windows, stop the process.
+		if len(dir) != 0 && config.OSType == "windows" {
+			// Stop all zabbix agent
+			_, err = RunWinCommand("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
+			if err != nil {
+				return fmt.Errorf("path %s already in use.", pathConfig.ZabbixAgentDirAbsPath)
+			}
+		}
+	}
+	return nil
 }
 
 // NewCronFile Edit the crontab file
@@ -160,110 +180,112 @@ func main() {
 	// Read the configuration
 	ReadConfig(config)
 	// Process configuration
-	ProcessConfig(config)
+	err = ProcessConfig(config)
+	checkError(err, EXIT)
 
-	if config.PackageName == "" && config.PackageURL != "" {
-		pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
-	}
+	// Check the package
+	pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
+	// Unpacking the package
 
-	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL, PackageName := "1", "2", "3", "4", "5", "6", "7"
-	// Output configuration information
-	Logger("INFO", "ServerIP:", ServerIP)
-	Logger("INFO", "ServerPort:", ServerPort)
-	Logger("INFO", "AgentUser:", AgentUser)
-	Logger("INFO", "AgentDir:", AgentDir)
-	Logger("INFO", "AgentIP:", AgentIP)
-	Logger("INFO", "PackageURL:", PackageURL)
-	Logger("INFO", "PackageName:", PackageName)
+	/*
+		ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL, PackageName := "1", "2", "3", "4", "5", "6", "7"
+		// Output configuration information
+		Logger("INFO", "ServerIP:", ServerIP)
+		Logger("INFO", "ServerPort:", ServerPort)
+		Logger("INFO", "AgentUser:", AgentUser)
+		Logger("INFO", "AgentDir:", AgentDir)
+		Logger("INFO", "AgentIP:", AgentIP)
+		Logger("INFO", "PackageURL:", PackageURL)
+		Logger("INFO", "PackageName:", PackageName)
 
-	// find from the URL
-	if PackageName == "" {
-		// Check the package
-		// Get all filenames of current dir
-		filenames, err := GetFileNames(AgentDir)
-		if err != nil {
-			Logger("", err.Error())
-			os.Exit(1)
-		}
-		Logger("WARN", "get filenames successfully.")
-		// Check if there have package name with zabbix agent
-		Logger("INFO", "starting to get the zabbix agent package name.")
-		PackageName, err = GetZabbixAgentPackageName(filenames)
-		// if no package found,ready to download from url
-		if err != nil {
-			Logger("WARN", err.Error())
-			if PackageURL == "" {
-				// There are no installation packages available in the directory
-				Logger("INFO", "starting to search package from URL...")
-				Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
-				// Test URL
-				//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
-				// The link
-				Logger("INFO", fmt.Sprintf("default package dir: %s", PACKAGE_URL))
-				Logger("INFO", "starting to download...")
-				URLs, err := GetLinks(PACKAGE_URL)
+		// find from the URL
+		if PackageName == "" {
+			// Check the package
+			// Get all filenames of current dir
+			filenames, err := GetFileNames(AgentDir)
+			if err != nil {
+				Logger("", err.Error())
+				os.Exit(1)
+			}
+			Logger("WARN", "get filenames successfully.")
+			// Check if there have package name with zabbix agent
+			Logger("INFO", "starting to get the zabbix agent package name.")
+			PackageName, err = GetZabbixAgentPackageName(filenames)
+			// if no package found,ready to download from url
+			if err != nil {
+				Logger("WARN", err.Error())
+				if PackageURL == "" {
+					// There are no installation packages available in the directory
+					Logger("INFO", "starting to search package from URL...")
+					Logger("INFO", fmt.Sprintf("get the zabbix package link: %s", PackageURL))
+					// Test URL
+					//PackageDirURL = "http://10.191.101.254/zabbix-agent/"
+					// The link
+					Logger("INFO", fmt.Sprintf("default package dir: %s", PACKAGE_URL))
+					Logger("INFO", "starting to download...")
+					URLs, err := GetLinks(PACKAGE_URL)
+					if err != nil {
+						Logger("ERROR", err.Error())
+						os.Exit(1)
+					}
+					PackageURL = GetZabbixAgentLink(URLs)
+				}
+
+				// Download the installation package and save it in agentDir
+				Logger("INFO", "Downloading the zabbix package ...")
+				PackageName, err = DownloadPackage(PackageURL, AgentDir)
 				if err != nil {
 					Logger("ERROR", err.Error())
 					os.Exit(1)
 				}
-				PackageURL = GetZabbixAgentLink(URLs)
-			}
-
-			// Download the installation package and save it in agentDir
-			Logger("INFO", "Downloading the zabbix package ...")
-			PackageName, err = DownloadPackage(PackageURL, AgentDir)
-			if err != nil {
-				Logger("ERROR", err.Error())
-				os.Exit(1)
 			}
 		}
-	}
-	Logger("INFO", fmt.Sprintf("get the package name is %s", PackageName))
+		Logger("INFO", fmt.Sprintf("get the package name is %s", PackageName))
 
-	// Configure the path
-	packageAbsPath := filepath.Join(AgentDir, PackageName)
-	var zabbixDirAbsPath, zabbixAbsPath, zabbixConfAbsPath string
-	switch OS_TYPE {
-	case "linux":
-		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix_agentd")
-		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
-		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
-	case "windows":
-		zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix")
-		zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "bin", "zabbix_agentd.exe")
-		zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "conf", "zabbix_agentd.conf")
-		info, err := os.Stat(zabbixDirAbsPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				err := os.MkdirAll(zabbixDirAbsPath, os.ModePerm)
-				if err != nil {
-					Logger("ERROR", "mkdir failed.", err.Error())
+		// Configure the path
+		packageAbsPath := filepath.Join(AgentDir, PackageName)
+		var zabbixDirAbsPath, zabbixAbsPath, zabbixConfAbsPath string
+		switch OS_TYPE {
+		case "linux":
+			zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix_agentd")
+			zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "zabbix_script.sh")
+			zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "/etc/zabbix_agentd.conf")
+		case "windows":
+			zabbixDirAbsPath = filepath.Join(AgentDir, "zabbix")
+			zabbixAbsPath = filepath.Join(zabbixDirAbsPath, "bin", "zabbix_agentd.exe")
+			zabbixConfAbsPath = filepath.Join(zabbixDirAbsPath, "conf", "zabbix_agentd.conf")
+			info, err := os.Stat(zabbixDirAbsPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					err := os.MkdirAll(zabbixDirAbsPath, os.ModePerm)
+					if err != nil {
+						Logger("ERROR", "mkdir failed.", err.Error())
+					}
+				} else {
+					Logger("ERROR", err.Error())
+					os.Exit(1)
+				}
+			}
+			// Check the dir
+			infoMode := info.Mode()
+			if infoMode.IsDir() {
+				dir, _ := os.ReadDir(zabbixDirAbsPath)
+				if len(dir) != 0 {
+					// Stop all zabbix agent
+					_, err = RunWinCommand("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
+					if err != nil {
+						Logger("ERROR", "stop zabbix agent failed.", err.Error())
+						Logger("INFO", "the directory may be occupied by other programs")
+						os.Exit(1)
+					} else {
+						Logger("INFO", "stop zabbix agent successfully.")
+					}
 				}
 			} else {
-				Logger("ERROR", err.Error())
+				Logger("ERROR", fmt.Sprintf("path %s already in use.", zabbixDirAbsPath))
 				os.Exit(1)
 			}
-		}
-		// Check the dir
-		infoMode := info.Mode()
-		if infoMode.IsDir() {
-			dir, _ := os.ReadDir(zabbixDirAbsPath)
-			if len(dir) != 0 {
-				// Stop all zabbix agent
-				_, err = RunWinCommand("taskkill", "/F", "/IM", "zabbix_agentd.exe", "/T")
-				if err != nil {
-					Logger("ERROR", "stop zabbix agent failed.", err.Error())
-					Logger("INFO", "the directory may be occupied by other programs")
-					os.Exit(1)
-				} else {
-					Logger("INFO", "stop zabbix agent successfully.")
-				}
-			}
-		} else {
-			Logger("ERROR", fmt.Sprintf("path %s already in use.", zabbixDirAbsPath))
-			os.Exit(1)
-		}
-	}
+		}*/
 
 	// Unzip the installation package and extract it to the current folder
 	Logger("INFO", fmt.Sprintf("starting unpacking %s", packageAbsPath))

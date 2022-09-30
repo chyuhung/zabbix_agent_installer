@@ -27,17 +27,11 @@ func ReadConfig(config *Config) {
 	// Receive the command
 	flag.StringVar(&config.ServerIP, "s", "", "zabbix server ip.")
 	flag.StringVar(&config.ServerPort, "p", "8001", "zabbix server port.")
-	flag.StringVar(&config.AgentIP, "i", "", "zabbix agent ip,default is host's main ip.")
+	flag.StringVar(&config.AgentIP, "i", "", "zabbix agent ip,default is the main ip.")
 	flag.StringVar(&config.PackageURL, "l", "", "zabbix agent package URL.")
 	flag.StringVar(&config.PackageName, "f", "", "zabbix agent package name.")
-	switch config.OSType {
-	case "linux":
-		flag.StringVar(&config.AgentUser, "u", "cloud", "zabbix agent user.")
-		flag.StringVar(&config.AgentDir, "d", "", "zabbix agent directory,default is current user's home directory.")
-	case "windows":
-		flag.StringVar(&config.AgentUser, "u", "", "zabbix agent user.")
-		flag.StringVar(&config.AgentDir, "d", "c:\\", "zabbix agent directory.")
-	}
+	flag.StringVar(&config.AgentDir, "d", "", "zabbix agent directory.default is current dir.")
+	flag.StringVar(&config.AgentUser, "u", "", "zabbix agent user.default is current user.")
 	flag.Parse()
 }
 
@@ -133,6 +127,20 @@ func serverPortHandler(config *Config) error {
 	return nil
 }
 
+// packageNameHandler processes the package name
+func packageNameHandler(config *Config) error {
+	if config.PackageName == "" {
+		return nil
+	}
+	fileInfo, err := os.Stat(config.PackageName)
+	checkError(err, EXIT)
+	fileMode := fileInfo.Mode()
+	if fileMode.IsDir() {
+		return fmt.Errorf("invalid package name: %s", config.PackageName)
+	}
+	return nil
+}
+
 // packageURL processes the PackageURL
 func packageURLHandler(config *Config) error {
 	packageURL := config.PackageURL
@@ -146,10 +154,12 @@ func packageURLHandler(config *Config) error {
 	if !reg.MatchString(packageURL) {
 		return fmt.Errorf("invalid package URL: %s", packageURL)
 	}
+	config.PackageName, err = DownloadPackage(config.PackageURL, config.AgentDir)
+	checkError(err, EXIT)
 	return nil
 }
 
-func ProcessConfig(config *Config) {
+func ProcessConfig(config *Config) error {
 	var err error
 	// Check server ip
 	err = serverIPHandler(config)
@@ -166,7 +176,14 @@ func ProcessConfig(config *Config) {
 	// Check agent user
 	err = agentUserHandler(config)
 	checkError(err, EXIT)
+	// Check package name
+	err = packageNameHandler(config)
+	checkError(err, CONTINUE)
 	// Check package URL
 	err = packageURLHandler(config)
 	checkError(err, EXIT)
+	if config.PackageName == "" && config.PackageURL == "" {
+		fmt.Errorf("use -f or -l to specify package URI")
+	}
+	return nil
 }
