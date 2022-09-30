@@ -9,15 +9,6 @@ import (
 	"strings"
 )
 
-func IsEmptyString(v interface{}) bool {
-	if f, ok := v.(string); ok {
-		if f == "" {
-			return true
-		}
-	}
-	return false
-}
-
 // ReplaceString edits the given file,replacing all k with v.
 func ReplaceString(filePath string, args map[string]string) error {
 	tempFileAbsPath := filePath + ".temp"

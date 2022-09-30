@@ -7,9 +7,9 @@ import (
 
 // ReplaceOthers Replace the "\n","\r","\t" to " "
 func ReplaceOthers(s string) string {
-	strings.ReplaceAll(s, "\n", " ")
-	strings.ReplaceAll(s, "\t", " ")
-	strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
 	return s
 }
 

@@ -89,3 +89,9 @@ func TestGetUserHomePath(t *testing.T) {
 	}
 	t.Logf(userHomePath)
 }
+
+func TestGetAgentDir(t *testing.T) {
+	config := &Config{}
+	agentDirHandler(config)
+	t.Log(config.AgentDir)
+}

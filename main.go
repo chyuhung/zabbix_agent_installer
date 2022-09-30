@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"zabbix_agent_installer/utils"
 )
@@ -33,8 +32,6 @@ type PathConfig struct {
 	PackageAbsPath         string
 	ZabbixAgentDirAbsPath  string
 	ZabbixAgentAbsPath     string
-	ZabbixAgentDirAbsPath  string
-	ZabbixAgentAbsPath     string
 	ZabbixAgentConfAbsPath string
 }
 
@@ -44,8 +41,12 @@ var (
 	OS_ARCH      = "amd64"
 )
 
+const (
+	EXIT     = true
+	CONTINUE = false
+)
+
 func ProcessPathConfig(config *Config, pathConfig *PathConfig) {
-	pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
 	switch config.OSType {
 	case "linux":
 		pathConfig.ZabbixAgentDirAbsPath = filepath.Join(config.AgentDir, "zabbix_agentd")
@@ -139,36 +140,33 @@ func WriteCrontab(cron string) error {
 	}
 	return nil
 }
+
+// checkError prints an error message and exit if the exit is true
+func checkError(err error, exit bool) {
+	if err != nil {
+		Logger("ERROR", err.Error())
+		if exit {
+			os.Exit(1)
+		}
+	}
+}
 func main() {
+	var err error
 	var config = &Config{}
+	var pathConfig = &PathConfig{}
 	// Read the OS Info
-	ReadOSInfo(config)
+	err = ReadOSInfo(config)
+	checkError(err, EXIT)
 	// Read the configuration
 	ReadConfig(config)
 	// Process configuration
 	ProcessConfig(config)
 
-	PACKAGE_URL := "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_linux/"
-	// System type
-	OS_TYPE = runtime.GOOS
-	// Architecture Type
-	OS_ARCH = runtime.GOARCH
-	if OS_TYPE == "" || OS_ARCH == "" {
-		Logger("ERROR", "get OS info failed.")
-		os.Exit(1)
-	}
-	switch OS_TYPE {
-	case "linux":
-	case "windows":
-		DEFAULT_USER = "Administrator"
-		PACKAGE_URL = "http://10.191.22.9:8001/software/zabbix-4.0/zabbix_agentd_windows/"
-	default:
-		Logger("ERROR", "OS type not supported.")
-		os.Exit(1)
+	if config.PackageName == "" && config.PackageURL != "" {
+		pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
 	}
 
-	// Gets the key parameters
-	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL, PackageName := ScanParams()
+	ServerIP, ServerPort, AgentUser, AgentDir, AgentIP, PackageURL, PackageName := "1", "2", "3", "4", "5", "6", "7"
 	// Output configuration information
 	Logger("INFO", "ServerIP:", ServerIP)
 	Logger("INFO", "ServerPort:", ServerPort)
@@ -178,7 +176,6 @@ func main() {
 	Logger("INFO", "PackageURL:", PackageURL)
 	Logger("INFO", "PackageName:", PackageName)
 
-	// Use the package that user specified,otherwise use the package which found in the curr dir,then use the package
 	// find from the URL
 	if PackageName == "" {
 		// Check the package
