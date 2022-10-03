@@ -3,10 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"crypto/rand"
 	"fmt"
 	"io"
-	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,18 +97,6 @@ func NewCronFile(cron string) (string, error) {
 	return cronAbsPath, nil
 }
 
-// RandStringBytes Generate rand string
-func RandStringBytes(n int) string {
-	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, n)
-	size := len(letterBytes)
-	for i := range b {
-		w, _ := rand.Int(rand.Reader, big.NewInt(int64(size)))
-		b[i] = letterBytes[w.Int64()]
-	}
-	return string(b)
-}
-
 // NewCronTempFile Generate a crontab path
 func NewCronTempFile() (absPath string) {
 	randString := RandStringBytes(6)
@@ -156,37 +142,6 @@ func WriteCrontab(cron string) error {
 	err = os.Remove(dstCronFileAbsPath)
 	if err != nil {
 		return err
-	}
-	return nil
-}
-
-// checkError prints an error message and exit if the exit is true
-func checkError(err error, exit bool) {
-	if err != nil {
-		Logger("ERROR", err.Error())
-		if exit {
-			os.Exit(1)
-		}
-	}
-}
-
-// unpackingPackage
-func unpackingPackage(config *Config, pathConfig *PathConfig) error {
-	packageAbsPath := pathConfig.PackageAbsPath
-	agentDir := config.AgentDir
-	packageName := config.PackageName
-	if strings.Contains(packageName, ".zip") {
-		err := utils.UnZip(packageAbsPath, agentDir)
-		if err != nil {
-			return err
-		}
-	} else if strings.Contains(packageName, ".tar.gz") {
-		err := utils.Untar(packageAbsPath, agentDir)
-		if err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("unknown package format")
 	}
 	return nil
 }
@@ -331,13 +286,11 @@ func main() {
 	// Process configuration
 	err = ProcessConfig(config)
 	checkError(err, EXIT)
-
 	// Check the package
 	pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
 	// Unpacking the package
-	err = unpackingPackage(config, pathConfig)
+	err = utils.UnpackingFile(pathConfig.PackageAbsPath, config.AgentDir)
 	checkError(err, EXIT)
-
 	// Write configuration
 	err = writeConfig(config, pathConfig)
 	checkError(err, EXIT)

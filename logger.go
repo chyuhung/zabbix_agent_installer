@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -25,4 +26,14 @@ func Logger(level string, messages ...string) {
 		result += ReplaceOthers(messages[i]) + " "
 	}
 	fmt.Printf("[%s] %s\n", level, result)
+}
+
+// checkError prints an error message and exit if the exit is true
+func checkError(err error, exit bool) {
+	if err != nil {
+		Logger("ERROR", err.Error())
+		if exit {
+			os.Exit(1)
+		}
+	}
 }

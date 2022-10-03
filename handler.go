@@ -27,11 +27,11 @@ func ReadConfig(config *Config) {
 	// Receive the command
 	flag.StringVar(&config.ServerIP, "s", "", "zabbix server ip.")
 	flag.StringVar(&config.ServerPort, "p", "8001", "zabbix server port.")
-	flag.StringVar(&config.AgentIP, "i", "", "zabbix agent ip,default is the main ip.")
+	flag.StringVar(&config.AgentIP, "i", "", "zabbix agent ip. default is the main ip.")
 	flag.StringVar(&config.PackageURL, "l", "", "zabbix agent package URL.")
 	flag.StringVar(&config.PackageName, "f", "", "zabbix agent package name.")
-	flag.StringVar(&config.AgentDir, "d", "", "zabbix agent directory.default is current dir.")
-	flag.StringVar(&config.AgentUser, "u", "", "zabbix agent user.default is current user.")
+	flag.StringVar(&config.AgentDir, "d", "", "zabbix agent directory. default is current dir.")
+	flag.StringVar(&config.AgentUser, "u", "", "zabbix agent user. default is current user.")
 	flag.Parse()
 }
 

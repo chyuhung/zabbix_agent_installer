@@ -6,7 +6,7 @@ package utils
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -86,7 +86,7 @@ func GetLinuxVersion() (name, version string) {
 		cmd := exec.Command("cat", "/etc/os-release")
 		stdout, _ := cmd.StdoutPipe()
 		cmd.Start()
-		content, err := ioutil.ReadAll(stdout)
+		content, err := io.ReadAll(stdout)
 		if err == nil {
 			id := regexp.MustCompile(`\nID="?(.*?)"?\n`).FindStringSubmatch(string(content))
 			if len(id) > 1 {

@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 func UnZip(src, dst string) error {
@@ -39,9 +38,9 @@ func UnZip(src, dst string) error {
 		path := filepath.Join(dst, f.Name)
 
 		// Check for ZipSlip (Directory traversal)
-		if !strings.HasPrefix(path, filepath.Clean(dst)+string(os.PathSeparator)) {
-			//return fmt.Errorf("illegal file path: %s", path)
-		}
+		//if !strings.HasPrefix(path, filepath.Clean(dst)+string(os.PathSeparator)) {
+		//return fmt.Errorf("illegal file path: %s", path)
+		//}
 
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(path, f.Mode())

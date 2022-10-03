@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
 	"io"
+	"math/big"
 	"os"
 	"regexp"
 	"strings"
@@ -132,4 +134,16 @@ func IsContainsOr(s string, ss []string) bool {
 		}
 	}
 	return false
+}
+
+// RandStringBytes Generate rand string
+func RandStringBytes(n int) string {
+	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	size := len(letterBytes)
+	for i := range b {
+		w, _ := rand.Int(rand.Reader, big.NewInt(int64(size)))
+		b[i] = letterBytes[w.Int64()]
+	}
+	return string(b)
 }
