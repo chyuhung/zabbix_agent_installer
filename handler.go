@@ -58,22 +58,6 @@ func agentUserHandler(config *Config) error {
 			return fmt.Errorf("switch to %s then install", config.AgentUser)
 		}
 	}
-	/*
-		user := config.AgentUser
-		currentUser, err := GetCurrentUser() // test in WinServer2008sp2: WIN-0SH02HNMDMU\Administrator.
-		if err != nil {
-			return fmt.Errorf("get current user failed")
-		}
-		if user != "" && user != currentUser {
-			if strings.Contains(currentUser, DEFAULT_USER) { // Linux "cloud",Windows "Administrator"
-				return fmt.Errorf("switch to default user %s then install", DEFAULT_USER)
-			} else {
-				return fmt.Errorf("switch to the user %s then install", config.AgentUser)
-			}
-		}
-		config.AgentUser = currentUser
-		return nil
-	*/
 	return nil
 }
 
@@ -85,21 +69,6 @@ func agentDirHandler(config *Config) error {
 	}
 	config.AgentDir = dir
 	return nil
-
-	/*
-		dir := config.AgentDir
-		if IsEmptyString(dir) {
-			dir, err := GetUserHomePath()
-			if err != nil {
-				return errors.New("get current user home dir failed." + err.Error())
-				os.Exit(1)
-			}
-			config.AgentDir = dir
-		} else {
-			dir = filepath.Join(dir)
-			Logger("INFO", fmt.Sprintf("get current user home dir is %s", dir))
-			config.AgentDir = dir
-		}*/
 }
 
 // agentIPHandler processes the AgentIP
@@ -183,7 +152,7 @@ func ProcessConfig(config *Config) error {
 	err = packageURLHandler(config)
 	checkError(err, EXIT)
 	if config.PackageName == "" && config.PackageURL == "" {
-		fmt.Errorf("use -f or -l to specify package URI")
+		fmt.Printf("use -f or -l to specify package URI")
 	}
 	return nil
 }
