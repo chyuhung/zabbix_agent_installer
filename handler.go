@@ -49,7 +49,7 @@ func serverIPHandler(config *Config) error {
 // If not specify a user, use current user default,
 // If user is specified,check if the current user is the specified user.
 func agentUserHandler(config *Config) error {
-	if os.Geteuid() == 0 {
+	if os.Getuid() == 0 && config.AgentUser == "" {
 		return errors.New("switch to normal user then install")
 	}
 	if os.Getuid() != -1 {
@@ -152,7 +152,7 @@ func ProcessConfig(config *Config) error {
 	err = packageURLHandler(config)
 	checkError(err, EXIT)
 	if config.PackageName == "" && config.PackageURL == "" {
-		fmt.Printf("use -f or -l to specify package URI")
+		return fmt.Errorf("use -f or -l to specify package URI")
 	}
 	return nil
 }

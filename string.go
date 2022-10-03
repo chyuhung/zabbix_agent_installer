@@ -36,7 +36,7 @@ func ReplaceString(filePath string, args map[string]string) error {
 	br := bufio.NewReader(fi)
 	bw := bufio.NewWriter(fo)
 	for {
-		var newline string
+		//var newline string
 		line, err := br.ReadString('\n')
 		if err == io.EOF {
 			break
@@ -44,10 +44,9 @@ func ReplaceString(filePath string, args map[string]string) error {
 			return err
 		}
 		for k, v := range args { // Replace each k with v
-			newline = strings.ReplaceAll(line, k, v)
-			line = newline
+			line = strings.ReplaceAll(line, k, v)
 		}
-		_, err = bw.WriteString(newline + "\n")
+		_, err = bw.WriteString(line)
 		if err != nil {
 			return err
 		}

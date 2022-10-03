@@ -32,14 +32,24 @@ func Untar(src string, dst string) error {
 	tr := tar.NewReader(gr)
 	for {
 		hdr, err := tr.Next()
-		switch {
-		case err == io.EOF:
-			return nil // End of archive
-		case err != nil:
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
 			return err
-		case hdr == nil:
+		}
+		if hdr == nil {
 			continue
 		}
+		/*
+			switch {
+			case err == io.EOF:
+				return nil // End of archive
+			case err != nil:
+				return err
+			case hdr == nil:
+				continue
+			}
+		*/
 
 		// 设置保存路径为header中的name
 		dstFile := filepath.Join(dst, hdr.Name)

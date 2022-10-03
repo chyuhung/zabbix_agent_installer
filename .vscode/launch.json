@@ -3,5 +3,18 @@
     // 悬停以查看现有属性的描述。
     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [
+        {
+            "name": "Launch",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "args":[
+                "-s","10.191.2.1",
+                "-u","root",
+                "-f","zabbix-agentd-4.0.1-1.linux.x86_64.tar.gz"
+        ]
+        }
+    ]
 }

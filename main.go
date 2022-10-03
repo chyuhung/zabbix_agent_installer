@@ -157,9 +157,9 @@ func writeConfig(config *Config, pathConfig *PathConfig) error {
 		confArgsMap["%change_basepath%"] = zabbixDirAbsPath
 		confArgsMap["%change_serverip%"] = serverIP
 		confArgsMap["%change_hostname%"] = agentIP
-		Logger("INFO", "starting to modify the zabbix agent conf...")
 		err := ReplaceString(zabbixConfAbsPath, confArgsMap)
 		if err != nil {
+			fmt.Print("zabbixConfAbsPath:" + zabbixConfAbsPath)
 			return err
 		}
 	case "windows":
@@ -281,21 +281,29 @@ func main() {
 	// Read the OS Info
 	err = ReadOSInfo(config)
 	checkError(err, EXIT)
+	Logger("INFO", "read OS info successfully.")
 	// Read the configuration
 	ReadConfig(config)
+	Logger("INFO", "read config successfully.")
 	// Process configuration
 	err = ProcessConfig(config)
 	checkError(err, EXIT)
+	err = ProcessPathConfig(config, pathConfig)
+	checkError(err, EXIT)
+	Logger("INFO", "process config successfully.")
 	// Check the package
 	pathConfig.PackageAbsPath = filepath.Join(config.AgentDir, config.PackageName)
 	// Unpacking the package
 	err = utils.UnpackingFile(pathConfig.PackageAbsPath, config.AgentDir)
 	checkError(err, EXIT)
+	Logger("INFO", "unpack file successfully.")
 	// Write configuration
 	err = writeConfig(config, pathConfig)
 	checkError(err, EXIT)
+	Logger("INFO", "write config successfully.")
 	// Start zabbix agent
 	err = startAgent(config, pathConfig)
 	checkError(err, EXIT)
-	Logger("INFO", "the zabbix agent installer is running done.")
+	Logger("INFO", "start agent successfully.")
+	Logger("INFO", "zabbix_agent_installer is running done.")
 }
