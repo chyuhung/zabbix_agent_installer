@@ -23,7 +23,6 @@ func ReplaceString(filePath string, args map[string]string) error {
 			panic(err)
 		}
 	}()
-
 	fo, err := os.OpenFile(tempFileAbsPath, os.O_CREATE|os.O_WRONLY, os.ModePerm)
 	if err != nil {
 		return err
@@ -38,7 +37,7 @@ func ReplaceString(filePath string, args map[string]string) error {
 	for {
 		//var newline string
 		line, err := br.ReadString('\n')
-		if err == io.EOF {
+		if err == io.EOF && line == "" {
 			break
 		} else if err != nil {
 			return err
@@ -98,7 +97,7 @@ func RewriteLines(lines []byte, reMap map[*regexp.Regexp]string) ([]byte, error)
 		line, err := b.ReadString('\n')
 		if err == io.EOF && line == "" {
 			break
-		} else if err != nil && line == "" {
+		} else if err != nil {
 			return nil, err
 		}
 		for k, v := range reMap {
