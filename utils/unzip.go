@@ -63,13 +63,11 @@ func UnZip(src, dst string) error {
 		}
 		return nil
 	}
-
 	for _, f := range r.File {
 		err := extractAndWriteFile(f)
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }

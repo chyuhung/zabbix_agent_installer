@@ -32,25 +32,14 @@ func Untar(src string, dst string) error {
 	tr := tar.NewReader(gr)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
-			return nil
-		} else if err != nil {
+		switch {
+		case err == io.EOF:
+			return nil // End of archive
+		case err != nil:
 			return err
-		}
-		if hdr == nil {
+		case hdr == nil:
 			continue
 		}
-		/*
-			switch {
-			case err == io.EOF:
-				return nil // End of archive
-			case err != nil:
-				return err
-			case hdr == nil:
-				continue
-			}
-		*/
-
 		// 设置保存路径为header中的name
 		dstFile := filepath.Join(dst, hdr.Name)
 		// 判断文件类型
@@ -65,7 +54,7 @@ func Untar(src string, dst string) error {
 			}
 		case tar.TypeReg: // 文件，写入
 			// 创建可读写文件
-			file, err := os.OpenFile(dstFile, os.O_CREATE|os.O_RDWR, os.FileMode(hdr.Mode))
+			file, err := os.OpenFile(dstFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, os.FileMode(hdr.Mode))
 
 			if err != nil {
 				return err
