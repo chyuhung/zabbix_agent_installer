@@ -95,11 +95,16 @@ func RewriteLines(lines []byte, reMap map[*regexp.Regexp]string) ([]byte, error)
 	b := bufio.NewReader(br)
 	for {
 		line, err := b.ReadString('\n')
-		if err == io.EOF && line == "" {
-			break
-		} else if err != nil {
-			return nil, err
+		if err != nil {
+			if err == io.EOF {
+				if line == "" {
+					break
+				}
+			} else {
+				panic(err)
+			}
 		}
+
 		for k, v := range reMap {
 			if k.MatchString(line) {
 				line = v

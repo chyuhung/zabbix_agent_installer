@@ -159,7 +159,6 @@ func writeConfig(config *Config, pathConfig *PathConfig) error {
 		confArgsMap["%change_hostname%"] = agentIP
 		err := ReplaceString(zabbixConfAbsPath, confArgsMap)
 		if err != nil {
-			fmt.Print("zabbixConfAbsPath:" + zabbixConfAbsPath)
 			return err
 		}
 	case "windows":
@@ -250,14 +249,18 @@ func startAgent(config *Config, pathConfig *PathConfig) error {
 			return err
 		}
 		// Uninstall zabbix agent
-		_, err = RunWinCommand(zabbixAbsPath, "-c", zabbixConfAbsPath, "-d")
-		if err != nil {
-			Logger("ERROR", "uninstall zabbix agent failed.", err.Error())
-		} else {
-			Logger("INFO", "uninstall zabbix agent successfully.")
+		if !IsFileNotExist(zabbixDirAbsPath) {
+			_, err = RunWinCommand(zabbixAbsPath, "-c", zabbixConfAbsPath, "-d")
+			Logger("INFO", "run:", zabbixDirAbsPath, "-c", zabbixConfAbsPath, "-d")
+			if err != nil {
+				Logger("ERROR", "uninstall zabbix agent failed.", err.Error())
+			} else {
+				Logger("INFO", "uninstall zabbix agent successfully.")
+			}
 		}
 		// Install zabbix agent
 		_, err = RunWinCommand(zabbixAbsPath, "-c", zabbixConfAbsPath, "-i")
+		Logger("INFO", "run:", zabbixAbsPath, "-c", zabbixConfAbsPath, "-i")
 		if err != nil {
 			Logger("ERROR", "install zabbix agent failed.", err.Error())
 		} else {
@@ -265,6 +268,7 @@ func startAgent(config *Config, pathConfig *PathConfig) error {
 		}
 		// Start zabbix agent
 		_, err = RunWinCommand(zabbixAbsPath, "-c", zabbixConfAbsPath, "-s")
+		Logger("INFO", "run:", zabbixAbsPath, "-c", zabbixConfAbsPath, "-s")
 		if err != nil {
 			Logger("ERROR", "start zabbix agent failed.", err.Error())
 		} else {

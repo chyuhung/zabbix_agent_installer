@@ -23,11 +23,14 @@ func GetFileNames(absPath string) ([]string, error) {
 
 // IsFileNotExist returns true if the given file exists,otherwise returns false.
 func IsFileNotExist(fileAbsPath string) bool {
-	_, err := os.Stat(fileAbsPath)
+	fileInfo, err := os.Stat(fileAbsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return true
 		}
+	}
+	if fileInfo.IsDir() {
+		return false
 	}
 	return false
 }
